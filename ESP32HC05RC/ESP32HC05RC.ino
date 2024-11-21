@@ -5,10 +5,18 @@
 
 BleGamepad bleGamepad;
 
+// RETURN THE RECEIVED BYTE TO THE SENDER
+// IT ALLOWS TO SEE IF HC05 BRIDGE IS WORKING PROPERLY
+bool m_return_byte_received = false;
+// DISPLAY BYTE RECEIVED
+bool m_use_print_byte_debug= true;
+// DISPLAY ACTION TRIGGERED
+bool m_use_print_action_debug= true;
+
 char cLeft = ' ';
 char cRight = ' ';
 
-bool m_printDebug = true;
+bool m_use_print_received_double_char = true;
 
 int MIN_VALUE = 0;
 int MAX_VALUE = 32767;
@@ -32,6 +40,28 @@ float m_axis5 = 0;
 float m_axis6 = 0;
 float m_axis7 = 0;
 
+bool m_button_0=false;
+bool m_button_1=false;
+bool m_button_2=false;
+bool m_button_3=false;
+bool m_button_4=false;
+bool m_button_5=false;
+bool m_button_6=false;
+bool m_button_7=false;
+bool m_button_8=false;
+bool m_button_9=false;
+bool m_button_10=false;
+bool m_button_11=false;
+bool m_button_12=false;
+bool m_button_13=false;
+bool m_button_14=false;
+bool m_button_15=false;
+bool m_button_start=false;
+
+
+
+
+
 bool isCharDigital(char c) {
     return c >= '0' && c <= '9';
 }
@@ -48,11 +78,16 @@ void loop() {
   if (Serial2.available()) {
       // Read the incoming data and send it to the Serial monitor
       byte incomingByte = Serial2.read();
-      Serial2.write(incomingByte);
+
+      //SEND BACK BYTE TAKE TIME DISABLE IF YOU ARE NOT USING IT
+      if(m_return_byte_received){
+          Serial2.write(incomingByte);
+      }
+
       char c = (char)incomingByte;
       Serial.print("Received: ");
       Serial.println(c);
-         cLeft = cRight;
+        cLeft = cRight;
         cRight = c;
         if (isCharDigital(cRight)) {
             uartCommand(cLeft, cRight);
@@ -62,10 +97,99 @@ void loop() {
 }
 
 
+void print_button(int id, bool isPress){
+
+String t = ""+id;
+print_button(t,isPress);
+
+}
+
+void print_button(String text, bool isPress) {
+  if(!m_use_print_action_debug)
+    return;
+  Serial.print("Button: ");
+  Serial.print(text);
+  Serial.print(" ");
+  Serial.println(isPress ? "pressed" : "released");
+}
+
+void print_axis(){
+print_axis(
+m_axis0,
+m_axis1,
+m_axis2,
+m_axis3,
+m_axis4,
+m_axis5,
+m_axis6,
+m_axis7
+
+);
+
+}
+
+void print_buttons(){
+    if(!m_use_print_action_debug)
+        return;
+    Serial.print("Buttons: ");
+    Serial.print(m_button_0);
+    Serial.print(" ");
+    Serial.print(m_button_1);
+    Serial.print(" ");
+    Serial.print(m_button_2);
+    Serial.print(" ");
+    Serial.print(m_button_3);
+    Serial.print(" ");
+    Serial.print(m_button_4);
+    Serial.print(" ");
+    Serial.print(m_button_5);
+    Serial.print(" ");
+    Serial.print(m_button_6);
+    Serial.print(" ");
+    Serial.print(m_button_7);
+    Serial.print(" ");
+    Serial.print(m_button_8);
+    Serial.print(" ");
+    Serial.print(m_button_9);
+    Serial.print(" ");
+    Serial.print(m_button_10);
+    Serial.print(" ");
+    Serial.print(m_button_11);
+    Serial.print(" ");
+    Serial.print(m_button_12);
+    Serial.print(" ");
+    Serial.print(m_button_13);
+    Serial.print(" ");
+    Serial.print(m_button_14);
+    Serial.print(" ");
+    Serial.print(m_button_15);
+    Serial.print(" ");
+    Serial.println(m_button_start);
+}
 
 
+void print_axis(int m_axis0, int m_axis1, int m_axis2, int m_axis3, int m_axis4, int m_axis5, int m_axis6, int m_axis7) {
+  if(!m_use_print_action_debug)
+    return;
+  Serial.print("Axis: ");
+  Serial.print(m_axis0);
+  Serial.print(" ");
+  Serial.print(m_axis1);
+  Serial.print(" ");
+  Serial.print(m_axis2);
+  Serial.print(" ");
+  Serial.print(m_axis3);
+  Serial.print(" ");
+  Serial.print(m_axis4);
+  Serial.print(" ");
+  Serial.print(m_axis5);
+  Serial.print(" ");
+  Serial.print(m_axis6);
+  Serial.print(" ");
+  Serial.println(m_axis7);
+}
 void uartCommand(char cLeft, char cRight) {
-    if (m_printDebug) {
+    if (m_use_print_received_double_char) {
         Serial.print("Left: ");
         Serial.print(cLeft);
         Serial.print(" Right: ");
@@ -77,39 +201,42 @@ void uartCommand(char cLeft, char cRight) {
 
     if (cRight == '0') {
         switch (cLeft) {
-            case 'A': bleGamepad.press(BUTTON_1); break;
-            case 'a': bleGamepad.release(BUTTON_1); break;
-            case 'B': bleGamepad.press(BUTTON_2); break;
-            case 'b': bleGamepad.release(BUTTON_2); break;
-            case 'C': bleGamepad.press(BUTTON_3); break;
-            case 'c': bleGamepad.release(BUTTON_3); break;
-            case 'D': bleGamepad.press(BUTTON_4); break;
-            case 'd': bleGamepad.release(BUTTON_4); break;
-            case 'E': bleGamepad.press(BUTTON_5); break;
-            case 'e': bleGamepad.release(BUTTON_5); break;
-            case 'F': bleGamepad.press(BUTTON_6); break;
-            case 'f': bleGamepad.release(BUTTON_6); break;
-            case 'G': bleGamepad.press(BUTTON_7); break;
-            case 'g': bleGamepad.release(BUTTON_7); break;
-            case 'H': bleGamepad.press(BUTTON_8); break;
-            case 'h': bleGamepad.release(BUTTON_8); break;
-            case 'I': bleGamepad.press(BUTTON_9); break;
-            case 'i': bleGamepad.release(BUTTON_9); break;
-            case 'J': bleGamepad.press(BUTTON_10); break;
-            case 'j': bleGamepad.release(BUTTON_10); break;
-            case 'K': bleGamepad.press(BUTTON_11); break;
-            case 'k': bleGamepad.release(BUTTON_11); break;
-            case 'L': bleGamepad.press(BUTTON_12); break;
-            case 'l': bleGamepad.release(BUTTON_12); break;
-            case 'M': bleGamepad.press(BUTTON_13); break;
-            case 'm': bleGamepad.release(BUTTON_13); break;
-            case 'N': bleGamepad.press(BUTTON_14); break;
-            case 'n': bleGamepad.release(BUTTON_14); break;
-            case 'O': bleGamepad.press(BUTTON_15); break;
-            case 'o': bleGamepad.release(BUTTON_15); break;
-            case 'P': bleGamepad.pressStart(); break;
-            case 'p': bleGamepad.releaseStart(); break;
+            case 'A': bleGamepad.press(BUTTON_1);m_button_0=true; break;
+            case 'a': bleGamepad.release(BUTTON_1);m_button_0=false; break;
+            case 'B': bleGamepad.press(BUTTON_2);m_button_1=true; break;
+            case 'b': bleGamepad.release(BUTTON_2);m_button_1=false; break;
+            case 'C': bleGamepad.press(BUTTON_3);m_button_2=true; break;
+            case 'c': bleGamepad.release(BUTTON_3);m_button_2=false; break;
+            case 'D': bleGamepad.press(BUTTON_4);m_button_3=true; break;
+            case 'd': bleGamepad.release(BUTTON_4);m_button_3=false; break;
+            case 'E': bleGamepad.press(BUTTON_5);m_button_4=true; break;
+            case 'e': bleGamepad.release(BUTTON_5);m_button_4=false; break;
+            case 'F': bleGamepad.press(BUTTON_6);m_button_5=true; break;
+            case 'f': bleGamepad.release(BUTTON_6);m_button_5=false; break;
+            case 'G': bleGamepad.press(BUTTON_7);m_button_6=true; break;
+            case 'g': bleGamepad.release(BUTTON_7);m_button_6=false; break;
+            case 'H': bleGamepad.press(BUTTON_8);m_button_7=true; break;
+            case 'h': bleGamepad.release(BUTTON_8);m_button_7=false; break;
+            case 'I': bleGamepad.press(BUTTON_9);m_button_8=true; break;
+            case 'i': bleGamepad.release(BUTTON_9);m_button_8=false; break;
+            case 'J': bleGamepad.press(BUTTON_10);m_button_9=true; break;
+            case 'j': bleGamepad.release(BUTTON_10);m_button_9=false; break;
+            case 'K': bleGamepad.press(BUTTON_11);m_button_10=true; break;
+            case 'k': bleGamepad.release(BUTTON_11);m_button_10=false; break;
+            case 'L': bleGamepad.press(BUTTON_12);m_button_11=true; break;
+            case 'l': bleGamepad.release(BUTTON_12);m_button_11=false; break;
+            case 'M': bleGamepad.press(BUTTON_13);m_button_12=true; break;
+            case 'm': bleGamepad.release(BUTTON_13);m_button_12=false; break;
+            case 'N': bleGamepad.press(BUTTON_14);m_button_13=true; break;
+            case 'n': bleGamepad.release(BUTTON_14);m_button_13=false; break;
+            case 'O': bleGamepad.press(BUTTON_15);m_button_14=true; break;
+            case 'o': bleGamepad.release(BUTTON_15);m_button_14=false; break;
+            case 'P': bleGamepad.press(BUTTON_16);m_button_15=true; break;
+            case 'p': bleGamepad.release(BUTTON_16);m_button_15=false; break;
+            case 'Q': bleGamepad.pressStart();m_button_start=true; break;
+            case 'q': bleGamepad.releaseStart();m_button_start=false; break;
         }
+        print_buttons();
         return;
     }
 
@@ -133,7 +260,7 @@ void uartCommand(char cLeft, char cRight) {
             case 'H': m_axis7 = MAX_VALUE; break;
             case 'h': m_axis7 = MIN_VALUE; break;
         }
-        bleGamepad.setAxes(m_axis0, m_axis1, m_axis2, m_axis3, m_axis4, m_axis5, m_axis6, m_axis7);
+        
     }
 
     if (cRight == '2') {
@@ -219,5 +346,6 @@ void uartCommand(char cLeft, char cRight) {
         }
     }
     bleGamepad.setAxes(m_axis0, m_axis1, m_axis2, m_axis3, m_axis4, m_axis5, m_axis6, m_axis7);
+    print_axis();
 }
 
