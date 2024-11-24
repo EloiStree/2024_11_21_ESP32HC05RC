@@ -750,79 +750,107 @@ void integerToXbox(int value){
     //18 50 20 00 10
     //1850200010
     //4 bytes because integer
-    int rightHorizontalfrom1to99 =  (value/1)%100;
-    int rightVerticalfrom1to99 =    (value/100)%100;
-    int leftHorizontalfrom1to99 =   (value/10000)%100;
-    int leftVerticalfrom1to99 =     (value/1000000)%100;
-    setLeftHorizontal(turnFrom1To99AsPercent(leftHorizontalfrom1to99));
-    setLeftVertical(turnFrom1To99AsPercent(leftVerticalfrom1to99));
-    setRightHorizontal(turnFrom1To99AsPercent(rightHorizontalfrom1to99));
-    setRightVertical(turnFrom1To99AsPercent(rightVerticalfrom1to99));
+    int leftHorizontalfrom1to99 =   (value/1000000)%100;
+    int leftVerticalfrom1to99 =     (value/10000)%100;
+    int rightHorizontalfrom1to99 =  (value/100)%100;
+    int rightVerticalfrom1to99 =    (value/1)%100;
+    float leftHorizontalPercent= turnFrom1To99AsPercent(leftHorizontalfrom1to99);
+    float leftVerticalPercent= turnFrom1To99AsPercent(leftVerticalfrom1to99);
+    float rightHorizontalPercent= turnFrom1To99AsPercent(rightHorizontalfrom1to99);
+    float rightVerticalPercent= turnFrom1To99AsPercent(rightVerticalfrom1to99);
+    
+    Serial.print("DD:");
+    Serial.print(leftHorizontalfrom1to99);
+    Serial.print(" ");
+    Serial.print(leftVerticalfrom1to99);
+    Serial.print(" ");
+    Serial.print(rightHorizontalfrom1to99);
+    Serial.print(" ");
+    Serial.print(rightVerticalfrom1to99);
+    Serial.println(" ");
+    Serial.print("PCT:");
+    Serial.print(leftHorizontalPercent);
+    Serial.print(" ");
+    Serial.print(leftHorizontalPercent);
+    Serial.print(" ");
+    Serial.print(leftHorizontalPercent);
+    Serial.print(" ");
+    Serial.print(leftHorizontalPercent);
+    Serial.println(" ");
+    
+    setLeftHorizontal(leftHorizontalPercent);
+    setLeftVertical(leftVerticalPercent);
+    setRightHorizontal(rightHorizontalPercent);
+    setRightVertical(rightVerticalPercent);
    }
    else if(value>=1700000000 && value<=1799999999){
       m_binaryBufferOfInteger[33]; // Buffer to store the binary representation (32 bits + null terminator)
       intToBinaryBuffer(value, m_binaryBufferOfInteger, 33);
       Serial.println(m_binaryBufferOfInteger);
-      intToBinaryBufferLess(value, 1700000000,m_binaryBufferOfInteger,33);
+      value=value-1700000000;
+      intToBinaryBuffer(value,m_binaryBufferOfInteger,33);
       Serial.println(m_binaryBufferOfInteger);
       
 
-    float triggerLeft=0.0;
-    float triggerRight=0.0;
-    float arrowHorizontal=0;
-    float arrowVertical =0;
-    if(isIntegerBitRightToLeftTrue(value, 0)) pressA(true);
-    else pressA(false);
-    if(isIntegerBitRightToLeftTrue(value, 1)) pressX(true);
-    else pressX(false);
-    if(isIntegerBitRightToLeftTrue(value, 2)) pressB(true);
-    else pressB(false);
-    if(isIntegerBitRightToLeftTrue(value, 3)) pressY(true);
-    else pressY(false);
-    if(isIntegerBitRightToLeftTrue(value, 4)) pressLeftSideButton(true);
-    else pressLeftSideButton(false);
-    if(isIntegerBitRightToLeftTrue(value, 5)) pressRightSideButton(true);
-    else pressRightSideButton(false);
-    if(isIntegerBitRightToLeftTrue(value, 6)) pressLeftStick(true);
-    else pressLeftStick(false);
-    if(isIntegerBitRightToLeftTrue(value, 7)) pressRightStick(true);
-    else pressRightStick(false);
-    if(isIntegerBitRightToLeftTrue(value, 8)) pressMenuLeft(true);
-    else pressMenuLeft(false);
-    if(isIntegerBitRightToLeftTrue(value, 9)) pressMenuRight(true);
-    else pressMenuRight(false);
-    if(isIntegerBitRightToLeftTrue(value, 10)) arrowVertical+=1; // CLOCK WISE N
-    if(isIntegerBitRightToLeftTrue(value, 11)) arrowHorizontal+=1; // CLOCK WISE E
-    if(isIntegerBitRightToLeftTrue(value, 12)) arrowVertical+=-1; // CLOCK WISE S
-    if(isIntegerBitRightToLeftTrue(value, 13)) arrowHorizontal+=-1; //// CLOCK WISE W
-    if(isIntegerBitRightToLeftTrue(value, 18)) triggerLeft+=(0.25);
-    if(isIntegerBitRightToLeftTrue(value, 19)) triggerLeft+=(0.25);
-    if(isIntegerBitRightToLeftTrue(value, 20)) triggerLeft+=(0.5);
-    if(isIntegerBitRightToLeftTrue(value, 21)) triggerRight+=(0.25);
-    if(isIntegerBitRightToLeftTrue(value, 22)) triggerRight+=(0.25);
-    if(isIntegerBitRightToLeftTrue(value, 23)) triggerRight+=(0.5);
-    setTriggerLeftPercent(triggerLeft);
-    setTriggerRightPercent(triggerRight);
+      float triggerLeft=0.0;
+      float triggerRight=0.0;
+      float arrowHorizontal=0;
+      float arrowVertical =0;
+      if(isIntegerBitRightToLeftTrue(value, 0)) pressA(true);
+      else pressA(false);
+      if(isIntegerBitRightToLeftTrue(value, 1)) pressX(true);
+      else pressX(false);
+      if(isIntegerBitRightToLeftTrue(value, 2)) pressB(true);
+      else pressB(false);
+      if(isIntegerBitRightToLeftTrue(value, 3)) pressY(true);
+      else pressY(false);
+      if(isIntegerBitRightToLeftTrue(value, 4)) pressLeftSideButton(true);
+      else pressLeftSideButton(false);
+      if(isIntegerBitRightToLeftTrue(value, 5)) pressRightSideButton(true);
+      else pressRightSideButton(false);
+      if(isIntegerBitRightToLeftTrue(value, 6)) pressLeftStick(true);
+      else pressLeftStick(false);
+      if(isIntegerBitRightToLeftTrue(value, 7)) pressRightStick(true);
+      else pressRightStick(false);
+      if(isIntegerBitRightToLeftTrue(value, 8)) pressMenuLeft(true);
+      else pressMenuLeft(false);
+      if(isIntegerBitRightToLeftTrue(value, 9)) pressMenuRight(true);
+      else pressMenuRight(false);
+      if(isIntegerBitRightToLeftTrue(value, 10)) pressHomeXboxButton(true);
+      else pressHomeXboxButton(false);
+      if(isIntegerBitRightToLeftTrue(value, 11)) arrowVertical+=1; // CLOCK WISE N
+      if(isIntegerBitRightToLeftTrue(value, 12)) arrowHorizontal+=1; // CLOCK WISE E
+      if(isIntegerBitRightToLeftTrue(value, 13)) arrowVertical+=-1; // CLOCK WISE S
+      if(isIntegerBitRightToLeftTrue(value, 14)) arrowHorizontal+=-1; //// CLOCK WISE W
+      
+      if(isIntegerBitRightToLeftTrue(value, 18)) triggerLeft+=(0.25);
+      if(isIntegerBitRightToLeftTrue(value, 19)) triggerLeft+=(0.25);
+      if(isIntegerBitRightToLeftTrue(value, 20)) triggerLeft+=(0.5);
+      if(isIntegerBitRightToLeftTrue(value, 21)) triggerRight+=(0.25);
+      if(isIntegerBitRightToLeftTrue(value, 22)) triggerRight+=(0.25);
+      if(isIntegerBitRightToLeftTrue(value, 23)) triggerRight+=(0.5);
+      setTriggerLeftPercent(triggerLeft);
+      setTriggerRightPercent(triggerRight);
 
-     if(arrowVertical==1 && arrowHorizontal==0)
-        pressArrowN();
-    else if(arrowVertical==1 && arrowHorizontal==1)
-        pressArrowNE();
-    else if(arrowVertical==0 && arrowHorizontal==1)
-        pressArrowE();
-    else if(arrowVertical==-1 && arrowHorizontal==1)
-        pressArrowSE();
-    else if(arrowVertical==-1 && arrowHorizontal==0)
-        pressArrowS();
-    else if(arrowVertical==-1 && arrowHorizontal==-1)
-        pressArrowSW();
-    else if(arrowVertical==0 && arrowHorizontal==-1)
-        pressArrowW();
-    else if(arrowVertical==1 && arrowHorizontal==-1)
-        pressArrowNW();
-    else
-        releaseDPad();
-    bool useDebugPrint = false;
+      if(arrowVertical==1 && arrowHorizontal==0)
+          pressArrowN();
+      else if(arrowVertical==1 && arrowHorizontal==1)
+          pressArrowNE();
+      else if(arrowVertical==0 && arrowHorizontal==1)
+          pressArrowE();
+      else if(arrowVertical==-1 && arrowHorizontal==1)
+          pressArrowSE();
+      else if(arrowVertical==-1 && arrowHorizontal==0)
+          pressArrowS();
+      else if(arrowVertical==-1 && arrowHorizontal==-1)
+          pressArrowSW();
+      else if(arrowVertical==0 && arrowHorizontal==-1)
+          pressArrowW();
+      else if(arrowVertical==1 && arrowHorizontal==-1)
+          pressArrowNW();
+      else
+          releaseDPad();
+      bool useDebugPrint = false;
     if(useDebugPrint){
       Serial.print(" A:");
       Serial.print(isIntegerBitRightToLeftTrue(value, 0));
@@ -897,19 +925,25 @@ void integerToXbox(int value){
 
 
 float turnFrom1To99AsPercent(int value){
+
     if(value == 0) return 0.0;
-    return float((double(value) - 1.0) / 98.0);
+    // Turn 1 to 99 to -1.0 to 1.0
+    return float((double(value) - 50.0) / 49.0);
 }
 
 int binaryTag= 1700000000 ;// 01100101010100111111000100000000
 
-bool isIntegerBitRightToLeftTrue(int value, int index){
-  //01100101010100111111000100000000
-  bool inBinaryTag= (binaryTag & (1 << index)) ? true: false;
-  bool inValue = (value & (1 << index)) ? true: false;
+// bool isIntegerBitRightToLeftTrueUsingBinaryTag(int value, int index){
+//   //01100101010100111111000100000000
+//   bool inBinaryTag= (binaryTag & (1 << index)) ? true: false;
+//   bool inValue = (value & (1 << index)) ? true: false;
   
-  if(inBinaryTag) return !inValue;
-  return inValue;
+//   if(inBinaryTag) return !inValue;
+//   return inValue;
+// }
+bool isIntegerBitRightToLeftTrue(int value, int index){
+  //Don't forget to remove the tag (like 1700000000)
+  return (value & (1 << index)) ? true: false;  
 }
 void intToBinaryBuffer(int value, char* buffer, size_t size) {
     if (size < 32) {
