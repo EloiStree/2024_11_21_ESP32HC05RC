@@ -32,6 +32,12 @@
 #define TXD2 17   // GPIO17 (U2TXD) Not Setable on the ESP32
 int ledPin = 15;  // NOT VERIFIED
 
+bool m_useHardwareJoystick = false;
+int m_pinJosytickLeftVertical = 33;
+int m_pinJosytickLeftHorizontal = 32;
+int m_pinJosytickRightVertical = 35;
+int m_pinJosytickRightHorizontal = 34;
+
 XboxGamepadDevice *gamepad;
 BleCompositeHID compositeHID("eLabRC XInput ESP32", "eLabRC", 100);
 
@@ -253,6 +259,11 @@ void setup()
 {
     Serial.begin(115200);
     pinMode(ledPin, OUTPUT); // sets the digital pin as output
+
+    pinMode(m_pinJosytickLeftVertical, INPUT);
+    pinMode(m_pinJosytickLeftHorizontal, INPUT);
+    pinMode(m_pinJosytickRightVertical, INPUT);
+    pinMode(m_pinJosytickRightHorizontal, INPUT);
     
     // Uncomment one of the following two config types depending on which controller version you want to use
     // The XBox series X controller only works on linux kernels >= 6.5
@@ -367,6 +378,11 @@ void integerCommandReceived(int32_t value){
 
 int m_gamepadReportModulo=200;
 int m_nextReportCount =0;
+int m_nextReadAnalogicCount=0;
+int m_nextReadAnalogicModulo=50;
+
+float ANALOG_MIN=0; 
+float ANALOG_MAX=65535;
 void loop()
 {
 
@@ -402,8 +418,37 @@ void loop()
       m_nextReportCount=m_gamepadReportModulo;
       gamepad->sendGamepadReport();
   }
+
+  if (m_useHardwareJoystick) {
+    m_nextReadAnalogicCount--;
+    if(m_nextReadAnalogicCount<0)
+    {
+       
+        m_nextReadAnalogicCount=m_nextReadAnalogicModulo;
+        int value = analogRead(m_pinJosytickLeftVertical);
+        float percentLV = ((value/4095.0)-0.5)*2.0;
+        value = analogRead(m_pinJosytickLeftHorizontal);
+        float percentLH = ((value/4095.0)-0.5)*2.0;
+        value = analogRead(m_pinJosytickRightVertical);
+        float percentRV = ((value/4095.0)-0.5)*2.0;
+        value = analogRead(m_pinJosytickRightHorizontal);
+        float percentRH = ((value/4095.0)-0.5)*2.0;
+      
+
+
+        if(m_useHardwareJoystick){
+            setLeftVertical(percentLV);
+            setLeftHorizontal(percentLH);
+            setRightVertical(percentRV);
+            setRightHorizontal(percentRH);
+        }
+     
+    }
+  }
+
   delay(1);
 }
+
 
 
 // ################################ GAMEPAD CONTROL ####################################
@@ -535,6 +580,8 @@ void integerToXbox(int value){
         switch(value){
             case 1399: randomInputAllGamepadNoMenu(); break;
             case 2399: releaseAllGamepad(); break;
+            case 1390: m_useHardwareJoystick=true;  Serial.println("Hardware Joystick ON"); break;
+            case 2390: m_useHardwareJoystick=false;  Serial.println("Hardware Joystick OFF"); break;
             case 1300: pressA(true); break;
             case 2300: pressA(false); break;
             case 1301: pressX(true); break;
@@ -716,18 +763,153 @@ void integerToXbox(int value){
       m_binaryBufferOfInteger[33]; // Buffer to store the binary representation (32 bits + null terminator)
       intToBinaryBuffer(value, m_binaryBufferOfInteger, 33);
       Serial.println(m_binaryBufferOfInteger);
+      intToBinaryBufferLess(value, 1700000000,m_binaryBufferOfInteger,33);
+      Serial.println(m_binaryBufferOfInteger);
+      
 
+    float triggerLeft=0.0;
+    float triggerRight=0.0;
+    float arrowHorizontal=0;
+    float arrowVertical =0;
+    if(isIntegerBitRightToLeftTrue(value, 0)) pressA(true);
+    else pressA(false);
+    if(isIntegerBitRightToLeftTrue(value, 1)) pressX(true);
+    else pressX(false);
+    if(isIntegerBitRightToLeftTrue(value, 2)) pressB(true);
+    else pressB(false);
+    if(isIntegerBitRightToLeftTrue(value, 3)) pressY(true);
+    else pressY(false);
+    if(isIntegerBitRightToLeftTrue(value, 4)) pressLeftSideButton(true);
+    else pressLeftSideButton(false);
+    if(isIntegerBitRightToLeftTrue(value, 5)) pressRightSideButton(true);
+    else pressRightSideButton(false);
+    if(isIntegerBitRightToLeftTrue(value, 6)) pressLeftStick(true);
+    else pressLeftStick(false);
+    if(isIntegerBitRightToLeftTrue(value, 7)) pressRightStick(true);
+    else pressRightStick(false);
+    if(isIntegerBitRightToLeftTrue(value, 8)) pressMenuLeft(true);
+    else pressMenuLeft(false);
+    if(isIntegerBitRightToLeftTrue(value, 9)) pressMenuRight(true);
+    else pressMenuRight(false);
+    if(isIntegerBitRightToLeftTrue(value, 10)) arrowVertical+=1; // CLOCK WISE N
+    if(isIntegerBitRightToLeftTrue(value, 11)) arrowHorizontal+=1; // CLOCK WISE E
+    if(isIntegerBitRightToLeftTrue(value, 12)) arrowVertical+=-1; // CLOCK WISE S
+    if(isIntegerBitRightToLeftTrue(value, 13)) arrowHorizontal+=-1; //// CLOCK WISE W
+    if(isIntegerBitRightToLeftTrue(value, 18)) triggerLeft+=(0.25);
+    if(isIntegerBitRightToLeftTrue(value, 19)) triggerLeft+=(0.25);
+    if(isIntegerBitRightToLeftTrue(value, 20)) triggerLeft+=(0.5);
+    if(isIntegerBitRightToLeftTrue(value, 21)) triggerRight+=(0.25);
+    if(isIntegerBitRightToLeftTrue(value, 22)) triggerRight+=(0.25);
+    if(isIntegerBitRightToLeftTrue(value, 23)) triggerRight+=(0.5);
+    setTriggerLeftPercent(triggerLeft);
+    setTriggerRightPercent(triggerRight);
+
+     if(arrowVertical==1 && arrowHorizontal==0)
+        pressArrowN();
+    else if(arrowVertical==1 && arrowHorizontal==1)
+        pressArrowNE();
+    else if(arrowVertical==0 && arrowHorizontal==1)
+        pressArrowE();
+    else if(arrowVertical==-1 && arrowHorizontal==1)
+        pressArrowSE();
+    else if(arrowVertical==-1 && arrowHorizontal==0)
+        pressArrowS();
+    else if(arrowVertical==-1 && arrowHorizontal==-1)
+        pressArrowSW();
+    else if(arrowVertical==0 && arrowHorizontal==-1)
+        pressArrowW();
+    else if(arrowVertical==1 && arrowHorizontal==-1)
+        pressArrowNW();
+    else
+        releaseDPad();
+    bool useDebugPrint = false;
+    if(useDebugPrint){
+      Serial.print(" A:");
+      Serial.print(isIntegerBitRightToLeftTrue(value, 0));
+      Serial.print(" X:");
+      Serial.print(isIntegerBitRightToLeftTrue(value, 1));
+      Serial.print(" B:");
+      Serial.print(isIntegerBitRightToLeftTrue(value, 2));
+      Serial.print(" Y:");
+      Serial.print(isIntegerBitRightToLeftTrue(value, 3));
+        Serial.print(" LB:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 4));
+        Serial.print(" RB:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 5));
+        Serial.print(" LS:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 6));
+        Serial.print(" RS:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 7));
+        Serial.print(" MENU:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 8));
+        Serial.print(" HOME:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 9));
+        Serial.print(" DPad N:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 10));
+        Serial.print(" DPad NE:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 11));
+        Serial.print(" DPad E:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 12));
+        Serial.print(" DPad SE:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 13));
+        Serial.print(" DPad S:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 14));
+        Serial.print(" DPad SW:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 15));
+        Serial.print(" DPad W:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 16));
+        Serial.print(" DPad NW:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 17));
+        Serial.print(" Left Trigger 0.25 1:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 18));
+        Serial.print(" Left Trigger 0.25 2:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 19));
+        Serial.print(" Left Trigger 0.5 3 :");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 20));
+        Serial.print(" Right Trigger 0.25 1:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 21));
+        Serial.print(" Right Trigger 0.25 2:");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 22));
+        Serial.print(" Right Trigger 0.5 3 :");
+        Serial.print(isIntegerBitRightToLeftTrue(value, 23));
+        Serial.println();
+    }
       //1715243245
       //11111111 11111111 11111111 11111111
-      
+      /*   
+      00 bit 1 0 
+      byte 11111111  255
+      signe byte 01111111 -127 127
+      float integer -1.0 ,1.0
+      11111111 11111111 11111111 11111111
+      deux bytes (short)
+      11111111 11011111 65535
+      11111111 * 20 * 100000000000
+      2 bytes 2 char
+      BD BR BU BL  JD JR BTL BTR  ML MC MR AD AR AU AL  
+      0  0  0  0   0  0  0   0    0  0  0  0  0  0  0   
+      jlv jlh jrv jrh tl tr
+      9   9   9   9   9  9
+      */     
     }
 }
 
 
 
 float turnFrom1To99AsPercent(int value){
-    if(value == 0) return 0;
+    if(value == 0) return 0.0;
     return float((double(value) - 1.0) / 98.0);
+}
+
+int binaryTag= 1700000000 ;// 01100101010100111111000100000000
+
+bool isIntegerBitRightToLeftTrue(int value, int index){
+  //01100101010100111111000100000000
+  bool inBinaryTag= (binaryTag & (1 << index)) ? true: false;
+  bool inValue = (value & (1 << index)) ? true: false;
+  
+  if(inBinaryTag) return !inValue;
+  return inValue;
 }
 void intToBinaryBuffer(int value, char* buffer, size_t size) {
     if (size < 32) {
@@ -735,6 +917,16 @@ void intToBinaryBuffer(int value, char* buffer, size_t size) {
     }
     for (int i = 0; i < 32; i++) {
         buffer[31 - i] = (value & (1 << i)) ? '1' : '0';
+    }
+    buffer[32] = '\0'; // Null-terminate the string
+}
+void intToBinaryBufferLess(int value, int lessValue, char* buffer, size_t size) {
+    if (size < 32) {
+        return; // Ensure buffer is large enough for 32 bits
+    }
+    for (int i = 0; i < 32; i++) {
+        bool inverse = (binaryTag & (1 << i));
+        buffer[31 - i] = (value & (1 << i)) ? (inverse ? '0' : '1') : (inverse ? '1' : '0');
     }
     buffer[32] = '\0'; // Null-terminate the string
 }
