@@ -17,6 +17,8 @@
  * ----------------------------------------------------------------------------
  */
 
+ // LAST UPDATE: 2024 11 26
+
 // This code is desing to allow: learning by codde,  QA testing in game and remapping of input
 // ESP32:   https://github.com/EloiStree/HelloInput/issues/288
 // Context: https://github.com/EloiStree/2024_08_29_ScratchToWarcraft
@@ -25,12 +27,24 @@
 
 #include <BleConnectionStatus.h>
 #include <BleCompositeHID.h>
+#include <KeyboardDevice.h>
+#include <MouseDevice.h>
 #include <XboxGamepadDevice.h>
+#include <KeyboardHIDCodes.h>
 
 
 #define RXD2 16   // GPIO16 (U2RXD) Not Setable on the ESP32
 #define TXD2 17   // GPIO17 (U2TXD) Not Setable on the ESP32
-int ledPin = 15;  // NOT VERIFIED
+int m_lepPin = 2;  // Can bet 15 on some (depend of the model)
+int m_vibrationPin=3; // If you want game feedback
+int m_activablePinIOLength=16;
+// https://chatgpt.com/share/67449be8-09c0-800e-a018-a2246365eedb
+// Not verified yet
+int m_activablePinIO[] = {4,5,12,13,14,15,18,19,21,22,23,25,26,27,32,33};
+int m_activablePinIOState[] = {LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW,LOW};
+
+
+bool m_useBluetoothElectronicFeedBack=true;
 
 bool m_useHardwareJoystick = false;
 int m_pinJosytickLeftVertical = 33;
@@ -39,6 +53,9 @@ int m_pinJosytickRightVertical = 35;
 int m_pinJosytickRightHorizontal = 34;
 
 XboxGamepadDevice *gamepad;
+GamepadDevice *gamepadGeneric;
+KeyboardDevice* keyboard;
+MouseDevice* mouse;
 BleCompositeHID compositeHID("eLabRC XInput ESP32", "eLabRC", 100);
 
 
@@ -248,17 +265,24 @@ bool isCharDigital(char c) {
 void OnVibrateEvent(XboxGamepadOutputReportData data)
 {
     if(data.weakMotorMagnitude > 0 || data.strongMotorMagnitude > 0){
-        digitalWrite(ledPin, LOW);
+        digitalWrite(m_lepPin, LOW);
     } else {
-        digitalWrite(ledPin, HIGH);
+        digitalWrite(m_lepPin, HIGH);
     }
-    Serial.println("Vibration event. Weak motor: " + String(data.weakMotorMagnitude) + " Strong motor: " + String(data.strongMotorMagnitude));
+    //Serial.println("Vibration event. Weak motor: " + String(data.weakMotorMagnitude) + " Strong motor: " + String(data.strongMotorMagnitude));
+}
+void pressReleaseMediaKey(uint32_t keyCode, bool press){
+  if (press)
+    keyboard->mediaKeyPress(keyCode);
+  else 
+    keyboard->mediaKeyRelease(keyCode);
 }
 
+bool m_mode_xinput=true;
 void setup()
 {
     Serial.begin(115200);
-    pinMode(ledPin, OUTPUT); // sets the digital pin as output
+    pinMode(m_lepPin, OUTPUT); // sets the digital pin as output
 
     pinMode(m_pinJosytickLeftVertical, INPUT);
     pinMode(m_pinJosytickLeftHorizontal, INPUT);
@@ -267,40 +291,56 @@ void setup()
     
     // Uncomment one of the following two config types depending on which controller version you want to use
     // The XBox series X controller only works on linux kernels >= 6.5
+    if(m_mode_xinput){
+
+      //XboxOneSControllerDeviceConfiguration* config = new XboxOneSControllerDeviceConfiguration();
+      XboxSeriesXControllerDeviceConfiguration* gamepadConfig = new XboxSeriesXControllerDeviceConfiguration();
+      // The composite HID device pretends to be a valid Xbox controller via vendor and product IDs (VID/PID).
+      // Platforms like windows/linux need this in order to pick an XInput driver over the generic BLE GATT HID driver. 
+      BLEHostConfiguration hostConfig = gamepadConfig->getIdealHostConfiguration();
+      Serial.println("Using VID source: " + String(hostConfig.getVidSource(), HEX));
+      Serial.println("Using VID: " + String(hostConfig.getVid(), HEX));
+      Serial.println("Using PID: " + String(hostConfig.getPid(), HEX));
+      Serial.println("Using GUID version: " + String(hostConfig.getGuidVersion(), HEX));
+      Serial.println("Using serial number: " + String(hostConfig.getSerialNumber()));
+      gamepad = new XboxGamepadDevice(gamepadConfig);
+      FunctionSlot<XboxGamepadOutputReportData> vibrationSlot(OnVibrateEvent);
+      gamepad->onVibrate.attach(vibrationSlot);
+      compositeHID.addDevice(gamepad);
+      Serial.println("Starting composite HID device...");
+      compositeHID.begin(hostConfig);
+      //setLeftVertical(1);
+      //setRightVertical(1);
+      releaseAllGamepad();
+  }
+  else if(!m_mode_xinput)
+  {
+      // Set up gamepad
+      GamepadConfiguration gamepadClassicConfig;
+      gamepadClassicConfig.setButtonCount(32);
+      gamepadClassicConfig.setHatSwitchCount(1);
+      Serial.print("iiikik");
+      Serial.println(gamepadClassicConfig.getAxisCount());
+      //gamepadConfig.setSimulationMode(true);
+      gamepadGeneric = new GamepadDevice(gamepadClassicConfig);
     
-    //XboxOneSControllerDeviceConfiguration* config = new XboxOneSControllerDeviceConfiguration();
-    XboxSeriesXControllerDeviceConfiguration* config = new XboxSeriesXControllerDeviceConfiguration();
-
-    // The composite HID device pretends to be a valid Xbox controller via vendor and product IDs (VID/PID).
-    // Platforms like windows/linux need this in order to pick an XInput driver over the generic BLE GATT HID driver. 
-    BLEHostConfiguration hostConfig = config->getIdealHostConfiguration();
-    Serial.println("Using VID source: " + String(hostConfig.getVidSource(), HEX));
-    Serial.println("Using VID: " + String(hostConfig.getVid(), HEX));
-    Serial.println("Using PID: " + String(hostConfig.getPid(), HEX));
-    Serial.println("Using GUID version: " + String(hostConfig.getGuidVersion(), HEX));
-    Serial.println("Using serial number: " + String(hostConfig.getSerialNumber()));
+      KeyboardConfiguration keyboardConfig;
+      keyboardConfig.setUseMediaKeys(true);
+      keyboard = new KeyboardDevice(keyboardConfig);
+      MouseConfiguration mouseConfig;
+      mouse = new MouseDevice(mouseConfig);
+      compositeHID.addDevice(keyboard);
+      compositeHID.addDevice(mouse);
+      compositeHID.addDevice(gamepadGeneric);
+      compositeHID.begin();
+      delay(3000);
+  }
     
-    // Set up gamepad
-    gamepad = new XboxGamepadDevice(config);
 
-    // Set up vibration event handler
-    FunctionSlot<XboxGamepadOutputReportData> vibrationSlot(OnVibrateEvent);
-    gamepad->onVibrate.attach(vibrationSlot);
-
-    // Add all child devices to the top-level composite HID device to manage them
-    compositeHID.addDevice(gamepad);
-
-    // Start the composite HID device to broadcast HID reports
-    Serial.println("Starting composite HID device...");
-    compositeHID.begin(hostConfig);
-    //setLeftVertical(1);
-    //setRightVertical(1);
-   // pressArrowN();
-    
-    releaseAllGamepad();
-    Serial.println("Starting BLE work!");
-    Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);  
-    Serial.println("UART1 initialized.");
+      
+      Serial.println("Starting BLE work!");
+      Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);  
+      Serial.println("UART1 initialized.");
 
 }
 
@@ -359,20 +399,370 @@ bool isNumericString(String str) {
   }
   return true;
 }
-void traditionalTextCommand(String text){
-    Serial.print("CMD:");
-    Serial.println(text); 
 
-    if(text=="A") pressA(true);
-    if(text=="a") pressA(false);
-    if(text=="RECORD") recordStart();
-    if(text=="record") recordStop();
+void BE_SendSoundPing(char tag ='S',float volume=1){
+  if(!m_useBluetoothElectronicFeedBack) 
+    return;
+  Serial2.print("*");
+  Serial2.print(tag);
+  Serial2.print("V");
+  Serial2.println(int(volume*100.0));
 }
+
+void BE_SetGaugeChar(char tag='G', float percent=1.0){
+
+  if(!m_useBluetoothElectronicFeedBack) 
+    return;
+  Serial2.print("*");
+  Serial2.print(tag);
+  Serial2.print(int(percent*100.0));
+  Serial2.println("*");
+
+
+}
+
+void BE_SendColorInfo(char tag, float r, float g, float b){
+
+  if(!m_useBluetoothElectronicFeedBack) 
+    return;
+  Serial2.print("*");
+  Serial2.print(tag);
+  Serial2.print("R");
+  Serial2.print(int(r*255.0));
+  Serial2.print("G");
+  Serial2.print(int(g*255.0));
+  Serial2.print("B");
+  Serial2.println(int(b*255.0));
+  Serial2.println("*");
+}
+void BE_SendColorInfoString(String tag, float r=1.0, float g=1.0, float b=1.0){
+    // Bluetooth Electronic don't support other then char as tag.
+  if(!m_useBluetoothElectronicFeedBack) 
+    return;
+  Serial2.print("*");
+  Serial2.print(tag);
+  Serial2.print("R");
+  Serial2.print(int(r*255.0));
+  Serial2.print("G");
+  Serial2.print(int(g*255.0));
+  Serial2.print("B");
+  Serial2.print(int(b*255.0));
+  Serial2.println("*");
+}
+
+
+void SwitchAllPins(){
+
+    for(int i=0; i<m_activablePinIOLength; i++){
+        SwitchStateOfPin(i);
+    }
+}
+void SetAllPinsTo(bool value){
+
+    for(int i=0; i<m_activablePinIOLength; i++){
+        SetPinOnOff(i, value);
+    }
+  
+}
+
+
+void traditionalTextCommand(String text){
+  
+  
+    text.trim();
+    Serial.print("CMD:");
+    Serial.println(text);
+    BE_SendSoundPing();
+    
+
+  // 32 (Space)
+  // 33-47 (Special Characters): ! " # $ % & ' ( ) * + , - . /
+  // 48-57 (Numbers): 0 1 2 3 4 5 6 7 8 9
+  // 58-64 (Special Characters): : ; < = > ? @
+  // 65-90 (Uppercase Letters): A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+  // 91-96 (Special Characters): `[ \ ] ^ _ ``
+  // 97-122 (Lowercase Letters): a b c d e f g h i j k l m n o p q r s t u v w x y z
+  // 123-126 (Special Characters): { | } ~
+
+    // Using Bluetooth Electronic Default version
+    // Buttons 
+    if(text=="G") pressA(true);
+    else if(text=="BEDEBUG") m_useBluetoothElectronicFeedBack=true;
+    else if(text=="bedebug") m_useBluetoothElectronicFeedBack=false;
+    else if(text=="PINSWITCH") SwitchAllPins();
+    else if(text=="g") pressA(false);
+    else if(text=="Y") pressY(true);
+    else if(text=="y") pressY(false);
+    else if(text=="B") pressX(true);
+    else if(text=="b") pressX(false);
+    else if(text=="R") pressB(true);
+    else if(text=="r") pressB(false);
+    else if(text=="S" || text=="START") pressMenuRight(true);
+    else if(text=="s" || text=="start") pressMenuRight(false);
+    else if(text=="BACK") pressMenuLeft(true);
+    else if(text=="back") pressMenuLeft(false);
+    else if(text=="H") pressHomeXboxButton(true);
+    else if(text=="h") pressHomeXboxButton(false);
+    else if(text=="M") pressMenuLeft(true);
+    else if(text=="m") pressMenuLeft(false);
+    else if(text=="N") pressMenuRight(true);
+    else if(text=="n") pressMenuRight(false);
+    else if(text=="BA" || text=="BD") pressA(true);
+    else if(text=="ba"|| text=="bd") pressA(false);
+    else if(text=="BY"|| text=="BU") pressY(true);
+    else if(text=="by"|| text=="bu") pressY(false);
+    else if(text=="BX"|| text=="BL") pressX(true);
+    else if(text=="bx"|| text=="bl") pressX(false);
+    else if(text=="BB"|| text=="BR") pressB(true);
+    else if(text=="bb"|| text=="br") pressB(false);
+    else if(text=="AU") pressArrowN();
+    else if(text=="AC") releaseDPad();
+    else if(text=="AR") pressArrowE();
+    else if(text=="AD") pressArrowS();
+    else if(text=="AL") pressArrowW();
+    else if(text=="AN") pressArrowN();
+    else if(text=="AE") pressArrowE();
+    else if(text=="AS") pressArrowS();
+    else if(text=="AW") pressArrowW();
+    else if(text=="ANW") pressArrowNW();
+    else if(text=="ANE") pressArrowNE();
+    else if(text=="ASE") pressArrowSE();
+    else if(text=="ASW") pressArrowSW();
+    else if(text=="ANW") pressArrowNW();
+    else if(text=="ANE") pressArrowNE();
+    else if(text=="ASE") pressArrowSE();
+    else if(text=="ASW") pressArrowSW();
+    else if(text=="RECORD") recordStart();
+    else if(text=="record") recordStop();
+    else if(text=="SBL") pressLeftSideButton(true);
+    else if(text=="sbl") pressLeftSideButton(false);
+    else if(text=="SBR") pressRightSideButton(true);
+    else if(text=="sbr") pressRightSideButton(false);
+    else if(text=="JL") pressLeftStick(true);
+    else if(text=="jl") pressLeftStick(false);
+    else if(text=="TL") setTriggerLeftPercent(1);
+    else if(text=="tl") setTriggerLeftPercent(0);
+    else if(text=="TR") setTriggerRightPercent(1);
+    else if(text=="tr") setTriggerRightPercent(0);
+    else if(text=="JR") pressRightStick(true);
+    else if(text=="jr") pressRightStick(false);
+    else if(text=="MR") pressMenuRight(true);
+    else if(text=="mr") pressMenuRight(false);
+    else if(text=="ML") pressMenuLeft(true);
+    else if(text=="ml") pressMenuLeft(false);
+    else if(text=="MC") pressHomeXboxButton(true);
+    else if(text=="mc") pressHomeXboxButton(false);
+    // Big Grey Circle
+    else if(text=="M"){}
+    // Big Rectancle 
+    else if(text=="W"){}
+    // Switch vertical on off
+    else if(text=="C") m_useHardwareJoystick=true;
+    else if(text=="c") m_useHardwareJoystick=false;
+    // Power Button Switch on off
+    else if(text=="D") digitalWrite(m_lepPin, HIGH);
+    else if(text=="d") digitalWrite(m_lepPin, LOW);
+    else if(text=="V") setVibrationOn(true);
+    else if(text=="v") setVibrationOn(false);
+    else{
+        ParseIfContainsJoystickFromBlueElec(text);
+        ParseIfContainsPinOnOff(text);
+    }
+}
+
+void setVibrationOn(bool value){
+    if(value){
+        digitalWrite(m_vibrationPin, HIGH);
+    }
+    else{
+        digitalWrite(m_vibrationPin, LOW);
+    }
+}
+
+
+
+void BE_RemindMeOfPinNumber(int pinIndex){
+
+    if(!m_useBluetoothElectronicFeedBack) 
+        return;
+    if(pinIndex<0 || pinIndex>= m_activablePinIOLength){
+       Serial2.print("No pin for index:");
+       Serial2.println(pinIndex);
+    }
+    else{
+        Serial2.print("Pin index ");
+        Serial2.print(pinIndex);
+        Serial2.print(" is ");
+        Serial2.println(m_activablePinIO[pinIndex]);
+    }
+
+}
+void SwitchStateOfPin(int pinIndex){
+
+  if(pinIndex<0 || pinIndex>= m_activablePinIOLength)
+        return;
+
+      if(m_activablePinIOState[pinIndex]==LOW){
+          SetPinOnOff(pinIndex, true);
+          }
+      else {
+          SetPinOnOff(pinIndex, false);
+      }
+}
+
+void BE_SendPinState(int index){
+if(m_useBluetoothElectronicFeedBack){
+    if(index<0 || index>= m_activablePinIOLength)
+        return;
+       char p = '0';
+       switch(index){
+        case 0:p='0'; break;
+        case 1:p='1'; break;
+        case 2:p='2'; break;
+        case 3:p='3'; break;
+        case 4:p='4'; break;
+        case 5:p='5'; break;
+        case 6:p='6'; break;
+        case 7:p='7'; break;
+        case 8:p='8'; break;
+        case 9:p='9'; break;
+       }
+      if(m_activablePinIOState[index]==HIGH)
+        BE_SendColorInfo(p, 1.0, 1.0, 1.0);
+      else
+        BE_SendColorInfo(p, 0.1, 0.1, 0.1); 
+    }
+}
+
+void SetPinOnOff (int pinIndex, bool isOn){
+    if(pinIndex<0 || pinIndex>= m_activablePinIOLength)
+      return;
+
+    if(isOn){
+        digitalWrite(m_activablePinIO[pinIndex], HIGH);
+        m_activablePinIOState[pinIndex]=HIGH;
+    }
+    else{
+        digitalWrite(m_activablePinIO[pinIndex], LOW);
+        m_activablePinIOState[pinIndex]=LOW;
+    }
+    BE_SendPinState(pinIndex);
+}
+
+void ParseIfContainsPinOnOff(String text){
+
+    int length = text.length();
+    if(length>4) 
+        return;
+    if(!(text.charAt(0)=='P'||text.charAt(0)=='p'))
+        return;
+    bool isOn = text.charAt(0)=='P';
+    int pin = text.substring(1).toInt();
+    if(pin<0 || pin>=m_activablePinIOLength)
+        return;
+        
+    SetPinOnOff(pin, isOn);
+}
+
+void ParseIfContainsJoystickFromBlueElec(String text){
+    // 🤖 Genereted by GPT not tested yet.
+    // Joystick left  X50Y50 from 0 to 100
+    // Joystick left  LX50Y50 from 0 to 100
+    // Joystick right RX50Y50 from 0 to 100
+    bool isFound = false;
+    float x = 0;
+    float y = 0;
+    // Check if the string starts with LX or RX or just X
+    if (text.startsWith("LX")) {
+        isFound = true;
+        int xIndex = text.indexOf('X') + 1; // After LX
+        int yIndex = text.indexOf('Y', xIndex) + 1;
+        if (xIndex > 0 && yIndex > 0) {
+            x = text.substring(xIndex, text.indexOf('Y', xIndex)).toFloat();
+            y = text.substring(yIndex).toFloat();
+            x = ((x-50.0)/50.0);
+            y = ((y-50.0)/50.0);
+            setLeftHorizontal(x);
+            setLeftVertical(-y);
+        }
+    } 
+    else if (text.startsWith("RX")) {
+        isFound = true;
+        int xIndex = text.indexOf('X') + 1; // After RX
+        int yIndex = text.indexOf('Y', xIndex) + 1;
+
+        if (xIndex > 0 && yIndex > 0) {
+            x = text.substring(xIndex, text.indexOf('Y', xIndex)).toFloat();
+            y = text.substring(yIndex).toFloat();
+            x = ((x-50.0)/50.0);
+            y = ((y-50.0)/50.0);
+            setRightHorizontal(x);
+            setRightVertical(-y);
+        }
+
+    } 
+    else if (text.startsWith("X")) {
+        isFound = true;
+        int xIndex = text.indexOf('X') + 1;
+        int yIndex = text.indexOf('Y', xIndex) + 1;
+
+        if (xIndex > 0 && yIndex > 0) {
+            x = text.substring(xIndex, text.indexOf('Y', xIndex)).toFloat();
+            y = text.substring(yIndex).toFloat();
+            x = ((x-50.0)/50.0);
+            y = ((y-50.0)/50.0);
+            setLeftHorizontal(x);
+            setLeftVertical(-y);
+        }
+
+    }
+    else if (text.startsWith("TL")) {
+        isFound = true;
+        int tlIndex = text.indexOf('L') + 1; // After TL
+
+        if (tlIndex > 0) {
+            float triggerValue = text.substring(tlIndex).toInt();
+            setTriggerLeftPercent(triggerValue/100.0);
+        }
+    } 
+    else if (text.startsWith("TR")) {
+        isFound = true;
+        int trIndex = text.indexOf('R') + 1; // After TR
+
+        if (trIndex > 0) {
+            float triggerValue = text.substring(trIndex).toInt();
+            setTriggerRightPercent(triggerValue/100.0);
+        }
+    } // Check if the string starts with 'A'
+    else if (text.startsWith("A")) {
+        isFound = true;
+        float sensibilityInDegree=15.0;
+        // Find positions of the key characters
+        int startIndex = text.indexOf('A') + 1; // Start after 'A'
+        int commaIndex = text.indexOf(',');
+        int starIndex = text.indexOf('*');
+
+        // Ensure all necessary characters are present
+        if (startIndex > 0 && commaIndex > startIndex && starIndex > commaIndex) {
+            // Extract and convert X and Y values
+            String pitch = text.substring(startIndex, commaIndex);
+            String roll = text.substring(commaIndex + 1, starIndex);
+            
+            x = ((pitch.toFloat()) /sensibilityInDegree); // From 'A' to ','
+            y = ((roll.toFloat()) / sensibilityInDegree); // From ',' to '*'
+            setLeftHorizontal(x);
+            setLeftVertical(-y);
+        }
+    }
+}
+
+
 void integerCommandReceived(int32_t value){
     Serial.print("Int:");
     Serial.println(value); // Echo the input back to the serial monitor
     
     integerToXbox(value);
+    integerToKeyboard(value);
     //uartCommand(m_clr0, m_clr1, m_clr2, m_clr3);
 }
 
@@ -466,10 +856,10 @@ uint16_t C_XBOX_BUTTON_RS       = XBOX_BUTTON_RS;
 
 
 
-void pressA(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_A);}else{releaseButtonId(C_XBOX_BUTTON_A);}}
-void pressB(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_B);}else{releaseButtonId(C_XBOX_BUTTON_B);}}
-void pressX(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_X);}else{releaseButtonId(C_XBOX_BUTTON_X);}}
-void pressY(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_Y);}else{releaseButtonId(C_XBOX_BUTTON_Y);}}
+void pressA(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_A);}else{releaseButtonId(C_XBOX_BUTTON_A);} BE_SendColorInfo('L',0,1,0); }
+void pressB(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_B);}else{releaseButtonId(C_XBOX_BUTTON_B);}BE_SendColorInfo('L',1,0,0); }
+void pressX(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_X);}else{releaseButtonId(C_XBOX_BUTTON_X);}BE_SendColorInfo('L',0,0,1); }
+void pressY(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_Y);}else{releaseButtonId(C_XBOX_BUTTON_Y);}BE_SendColorInfo('L',1,1,0); }
 void pressLeftSideButton(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_LB);}else{releaseButtonId(C_XBOX_BUTTON_LB);}}
 void pressRightSideButton(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_RB);}else{releaseButtonId(C_XBOX_BUTTON_RB);}}
 void pressLeftStick(bool isPress){if(isPress){pressButtonId(C_XBOX_BUTTON_LS);}else{releaseButtonId(C_XBOX_BUTTON_LS);}}
@@ -528,8 +918,8 @@ void setLeftVertical(float percent){ m_left_vertical = -percent; update_sticks()
 void setRightHorizontal(float percent){ m_right_horizontal = percent; update_sticks();}
 void setRightVertical(float percent){ m_right_vertical = -percent; update_sticks();}
 
-void setTriggerLeftPercent(float percent){ gamepad->setLeftTrigger(percent*XBOX_TRIGGER_MAX); gamepad->sendGamepadReport();}
-void setTriggerRightPercent(float percent){ gamepad->setRightTrigger(percent*XBOX_TRIGGER_MAX); gamepad->sendGamepadReport();}
+void setTriggerLeftPercent(float percent){ gamepad->setLeftTrigger(percent*XBOX_TRIGGER_MAX); gamepad->sendGamepadReport(); BE_SetGaugeChar('L',percent);}
+void setTriggerRightPercent(float percent){ gamepad->setRightTrigger(percent*XBOX_TRIGGER_MAX); gamepad->sendGamepadReport();BE_SetGaugeChar('R',percent);}
 
 void pressArrowN(){pressDpad(XboxDpadFlags::NORTH,true);  }
 void pressArrowE(){pressDpad(XboxDpadFlags::EAST,true); }
@@ -571,8 +961,488 @@ void update_sticks(){
 
 
 /*_____________________________________________*/
+#define KEY_MOD_LCTRL  0x01
+#define KEY_MOD_LSHIFT 0x02
+#define KEY_MOD_LALT   0x04
+#define KEY_MOD_LMETA  0x08
+#define KEY_MOD_RCTRL  0x10
+#define KEY_MOD_RSHIFT 0x20
+#define KEY_MOD_RALT   0x40
+#define KEY_MOD_RMETA  0x80
+#define KEY_A 0x04 // Keyboard a and A
+#define KEY_B 0x05 // Keyboard b and B
+#define KEY_C 0x06 // Keyboard c and C
+#define KEY_D 0x07 // Keyboard d and D
+#define KEY_E 0x08 // Keyboard e and E
+#define KEY_F 0x09 // Keyboard f and F
+#define KEY_G 0x0a // Keyboard g and G
+#define KEY_H 0x0b // Keyboard h and H
+#define KEY_I 0x0c // Keyboard i and I
+#define KEY_J 0x0d // Keyboard j and J
+#define KEY_K 0x0e // Keyboard k and K
+#define KEY_L 0x0f // Keyboard l and L
+#define KEY_M 0x10 // Keyboard m and M
+#define KEY_N 0x11 // Keyboard n and N
+#define KEY_O 0x12 // Keyboard o and O
+#define KEY_P 0x13 // Keyboard p and P
+#define KEY_Q 0x14 // Keyboard q and Q
+#define KEY_R 0x15 // Keyboard r and R
+#define KEY_S 0x16 // Keyboard s and S
+#define KEY_T 0x17 // Keyboard t and T
+#define KEY_U 0x18 // Keyboard u and U
+#define KEY_V 0x19 // Keyboard v and V
+#define KEY_W 0x1a // Keyboard w and W
+#define KEY_X 0x1b // Keyboard x and X
+#define KEY_Y 0x1c // Keyboard y and Y
+#define KEY_Z 0x1d // Keyboard z and Z
 
+#define KEY_1 0x1e // Keyboard 1 and !
+#define KEY_2 0x1f // Keyboard 2 and @
+#define KEY_3 0x20 // Keyboard 3 and #
+#define KEY_4 0x21 // Keyboard 4 and $
+#define KEY_5 0x22 // Keyboard 5 and %
+#define KEY_6 0x23 // Keyboard 6 and ^
+#define KEY_7 0x24 // Keyboard 7 and &
+#define KEY_8 0x25 // Keyboard 8 and *
+#define KEY_9 0x26 // Keyboard 9 and (
+#define KEY_0 0x27 // Keyboard 0 and )
 
+#define KEY_ENTER 0x28 // Keyboard Return (ENTER)
+#define KEY_ESC 0x29 // Keyboard ESCAPE
+#define KEY_BACKSPACE 0x2a // Keyboard DELETE (Backspace)
+#define KEY_TAB 0x2b // Keyboard Tab
+#define KEY_SPACE 0x2c // Keyboard Spacebar
+#define KEY_MINUS 0x2d // Keyboard - and _
+#define KEY_EQUAL 0x2e // Keyboard = and +
+#define KEY_LEFTBRACE 0x2f // Keyboard [ and {
+#define KEY_RIGHTBRACE 0x30 // Keyboard ] and }
+#define KEY_BACKSLASH 0x31 // Keyboard \ and |
+#define KEY_HASHTILDE 0x32 // Keyboard Non-US # and ~
+#define KEY_SEMICOLON 0x33 // Keyboard ; and :
+#define KEY_APOSTROPHE 0x34 // Keyboard ' and "
+#define KEY_GRAVE 0x35 // Keyboard ` and ~
+#define KEY_COMMA 0x36 // Keyboard , and <
+#define KEY_DOT 0x37 // Keyboard . and >
+#define KEY_SLASH 0x38 // Keyboard / and ?
+#define KEY_CAPSLOCK 0x39 // Keyboard Caps Lock
+
+#define KEY_F1 0x3a // Keyboard F1
+#define KEY_F2 0x3b // Keyboard F2
+#define KEY_F3 0x3c // Keyboard F3
+#define KEY_F4 0x3d // Keyboard F4
+#define KEY_F5 0x3e // Keyboard F5
+#define KEY_F6 0x3f // Keyboard F6
+#define KEY_F7 0x40 // Keyboard F7
+#define KEY_F8 0x41 // Keyboard F8
+#define KEY_F9 0x42 // Keyboard F9
+#define KEY_F10 0x43 // Keyboard F10
+#define KEY_F11 0x44 // Keyboard F11
+#define KEY_F12 0x45 // Keyboard F12
+
+#define KEY_SYSRQ 0x46 // Keyboard Print Screen
+#define KEY_SCROLLLOCK 0x47 // Keyboard Scroll Lock
+#define KEY_PAUSE 0x48 // Keyboard Pause
+#define KEY_INSERT 0x49 // Keyboard Insert
+#define KEY_HOME 0x4a // Keyboard Home
+#define KEY_PAGEUP 0x4b // Keyboard Page Up
+#define KEY_DELETE 0x4c // Keyboard Delete Forward
+#define KEY_END 0x4d // Keyboard End
+#define KEY_PAGEDOWN 0x4e // Keyboard Page Down
+#define KEY_RIGHT 0x4f // Keyboard Right Arrow
+#define KEY_LEFT 0x50 // Keyboard Left Arrow
+#define KEY_DOWN 0x51 // Keyboard Down Arrow
+#define KEY_UP 0x52 // Keyboard Up Arrow
+
+#define KEY_NUMLOCK 0x53 // Keyboard Num Lock and Clear
+#define KEY_KPSLASH 0x54 // Keypad /
+#define KEY_KPASTERISK 0x55 // Keypad *
+#define KEY_KPMINUS 0x56 // Keypad -
+#define KEY_KPPLUS 0x57 // Keypad +
+#define KEY_KPENTER 0x58 // Keypad ENTER
+#define KEY_KP1 0x59 // Keypad 1 and End
+#define KEY_KP2 0x5a // Keypad 2 and Down Arrow
+#define KEY_KP3 0x5b // Keypad 3 and PageDn
+#define KEY_KP4 0x5c // Keypad 4 and Left Arrow
+#define KEY_KP5 0x5d // Keypad 5
+#define KEY_KP6 0x5e // Keypad 6 and Right Arrow
+#define KEY_KP7 0x5f // Keypad 7 and Home
+#define KEY_KP8 0x60 // Keypad 8 and Up Arrow
+#define KEY_KP9 0x61 // Keypad 9 and Page Up
+#define KEY_KP0 0x62 // Keypad 0 and Insert
+#define KEY_KPDOT 0x63 // Keypad . and Delete
+
+#define KEY_102ND 0x64 // Keyboard Non-US \ and |
+#define KEY_COMPOSE 0x65 // Keyboard Application
+#define KEY_POWER 0x66 // Keyboard Power
+#define KEY_KPEQUAL 0x67 // Keypad =
+
+#define KEY_F13 0x68 // Keyboard F13
+#define KEY_F14 0x69 // Keyboard F14
+#define KEY_F15 0x6a // Keyboard F15
+#define KEY_F16 0x6b // Keyboard F16
+#define KEY_F17 0x6c // Keyboard F17
+#define KEY_F18 0x6d // Keyboard F18
+#define KEY_F19 0x6e // Keyboard F19
+#define KEY_F20 0x6f // Keyboard F20
+#define KEY_F21 0x70 // Keyboard F21
+#define KEY_F22 0x71 // Keyboard F22
+#define KEY_F23 0x72 // Keyboard F23
+#define KEY_F24 0x73 // Keyboard F24
+
+#define KEY_OPEN 0x74 // Keyboard Execute
+#define KEY_HELP 0x75 // Keyboard Help
+#define KEY_PROPS 0x76 // Keyboard Menu
+#define KEY_FRONT 0x77 // Keyboard Select
+#define KEY_STOP 0x78 // Keyboard Stop
+#define KEY_AGAIN 0x79 // Keyboard Again
+#define KEY_UNDO 0x7a // Keyboard Undo
+#define KEY_CUT 0x7b // Keyboard Cut
+#define KEY_COPY 0x7c // Keyboard Copy
+#define KEY_PASTE 0x7d // Keyboard Paste
+#define KEY_FIND 0x7e // Keyboard Find
+#define KEY_MUTE 0x7f // Keyboard Mute
+#define KEY_VOLUMEUP 0x80 // Keyboard Volume Up
+#define KEY_VOLUMEDOWN 0x81 // Keyboard Volume Down
+// 0x82  Keyboard Locking Caps Lock
+// 0x83  Keyboard Locking Num Lock
+// 0x84  Keyboard Locking Scroll Lock
+#define KEY_KPCOMMA 0x85 // Keypad Comma
+
+#define KEY_LEFTCTRL 0xe0 // Keyboard Left Control
+#define KEY_LEFTSHIFT 0xe1 // Keyboard Left Shift
+#define KEY_LEFTALT 0xe2 // Keyboard Left Alt
+#define KEY_LEFTMETA 0xe3 // Keyboard Left GUI
+#define KEY_RIGHTCTRL 0xe4 // Keyboard Right Control
+#define KEY_RIGHTSHIFT 0xe5 // Keyboard Right Shift
+#define KEY_RIGHTALT 0xe6 // Keyboard Right Alt
+#define KEY_RIGHTMETA 0xe7 // Keyboard Right GUI
+
+// Media key bitflags
+#define KEY_MEDIA_PLAY 0x1
+#define KEY_MEDIA_PAUSE 0x2
+#define KEY_MEDIA_RECORD 0x4
+#define KEY_MEDIA_FASTFORWARD 0x8
+#define KEY_MEDIA_REWIND 0x10
+#define KEY_MEDIA_NEXTTRACK 0x20
+#define KEY_MEDIA_PREVIOUSTRACK 0x40
+#define KEY_MEDIA_STOP 0x80
+#define KEY_MEDIA_EJECT 0x100
+#define KEY_MEDIA_RANDOMPLAY 0x200
+#define KEY_MEDIA_REPEAT 0x400
+#define KEY_MEDIA_PLAYPAUSE 0x800
+#define KEY_MEDIA_MUTE 0x1000
+#define KEY_MEDIA_VOLUMEUP 0x2000
+#define KEY_MEDIA_VOLUMEDOWN 0x4000
+#define KEY_MEDIA_WWWHOME 0x8000
+#define KEY_MEDIA_MYCOMPUTER 0x10000
+#define KEY_MEDIA_CALCULATOR 0x20000
+#define KEY_MEDIA_WWWFAVORITES 0x40000
+#define KEY_MEDIA_WWWSEARCH 0x80000
+#define KEY_MEDIA_WWWSTOP 0x100000
+#define KEY_MEDIA_WWWBACK 0x200000
+#define KEY_MEDIA_MEDIASELECT 0x400000
+#define KEY_MEDIA_MAIL 0x800000
+
+// LED bitflags
+#define KEY_LED_NUMLOCK 0x1
+#define KEY_LED_CAPSLOCK 0x2
+#define KEY_LED_SCROLLLOCK 0x4
+#define KEY_LED_COMPOSE 0x8
+#define KEY_LED_KANA 0x10
+
+void integerToKeyboard(int value){
+
+    if(value>=1000 && value <=2999){
+        // https://github.com/Mystfit/ESP32-BLE-CompositeHID/blob/master/KeyboardHIDCodes.h
+        // https://github.com/EloiStree/2024_08_29_ScratchToWarcraft
+        //keyRelease
+        switch(value){
+            case 1008: keyboard->keyPress(KEY_BACKSPACE); break;
+            case 1009: keyboard->keyPress(KEY_TAB); break;
+            case 1013: keyboard->keyPress(KEY_ENTER); break;
+            case 1016: keyboard->keyPress(KEY_LEFTSHIFT); break;
+            case 1017: keyboard->keyPress(KEY_LEFTCTRL); break;
+            case 1018: keyboard->keyPress(KEY_LEFTALT); break;
+            case 1019: keyboard->keyPress(KEY_PAUSE); break;
+            case 1020: keyboard->keyPress(KEY_CAPSLOCK); break;
+            case 1027: keyboard->keyPress(KEY_ESC); break;
+            case 1032: keyboard->keyPress(KEY_SPACE); break;
+            case 1033: keyboard->keyPress(KEY_PAGEUP); break;
+            case 1034: keyboard->keyPress(KEY_PAGEDOWN); break;
+            case 1035: keyboard->keyPress(KEY_END); break;
+            case 1036: keyboard->keyPress(KEY_HOME); break;
+            case 1037: keyboard->keyPress(KEY_LEFT); break;
+            case 1038: keyboard->keyPress(KEY_UP); break;
+            case 1039: keyboard->keyPress(KEY_RIGHT); break;
+            case 1040: keyboard->keyPress(KEY_DOWN); break;
+            case 1041: keyboard->keyPress(KEY_FRONT ); break;
+            case 1042: keyboard->keyPress(KEY_SYSRQ ); break;
+            case 1043: keyboard->keyPress(KEY_OPEN ); break;
+            case 1044: keyboard->keyPress(KEY_SYSRQ ); break;
+            case 1045: keyboard->keyPress(KEY_INSERT); break;
+            case 1046: keyboard->keyPress(KEY_DELETE); break;
+            case 1048: keyboard->keyPress(KEY_0); break;
+            case 1049: keyboard->keyPress(KEY_1); break;
+            case 1050: keyboard->keyPress(KEY_2); break;
+            case 1051: keyboard->keyPress(KEY_3); break;
+            case 1052: keyboard->keyPress(KEY_4); break;
+            case 1053: keyboard->keyPress(KEY_5); break;
+            case 1054: keyboard->keyPress(KEY_6); break;
+            case 1055: keyboard->keyPress(KEY_7); break;
+            case 1056: keyboard->keyPress(KEY_8); break;
+            case 1057: keyboard->keyPress(KEY_9); break;
+            case 1065: keyboard->keyPress(KEY_A); break;
+            case 1066: keyboard->keyPress(KEY_B); break;
+            case 1067: keyboard->keyPress(KEY_C); break;
+            case 1068: keyboard->keyPress(KEY_D); break;
+            case 1069: keyboard->keyPress(KEY_E); break;
+            case 1070: keyboard->keyPress(KEY_F); break;
+            case 1071: keyboard->keyPress(KEY_G); break;
+            case 1072: keyboard->keyPress(KEY_H); break;
+            case 1073: keyboard->keyPress(KEY_I); break;
+            case 1074: keyboard->keyPress(KEY_J); break;
+            case 1075: keyboard->keyPress(KEY_K); break;
+            case 1076: keyboard->keyPress(KEY_L); break;
+            case 1077: keyboard->keyPress(KEY_M); break;
+            case 1078: keyboard->keyPress(KEY_N); break;
+            case 1079: keyboard->keyPress(KEY_O); break;
+            case 1080: keyboard->keyPress(KEY_P); break;
+            case 1081: keyboard->keyPress(KEY_Q); break;
+            case 1082: keyboard->keyPress(KEY_R); break;
+            case 1083: keyboard->keyPress(KEY_S); break;
+            case 1084: keyboard->keyPress(KEY_T); break;
+            case 1085: keyboard->keyPress(KEY_U); break;
+            case 1086: keyboard->keyPress(KEY_V); break;
+            case 1087: keyboard->keyPress(KEY_W); break;
+            case 1088: keyboard->keyPress(KEY_X); break;
+            case 1089: keyboard->keyPress(KEY_Y); break;
+            case 1090: keyboard->keyPress(KEY_Z); break;
+            case 1091: keyboard->keyPress(KEY_LEFTMETA); break;
+            case 1092: keyboard->keyPress(KEY_RIGHTMETA); break;
+            case 1093: keyboard->keyPress(KEY_PROPS); break;
+            case 1096: keyboard->keyPress(KEY_KP0); break;
+            case 1097: keyboard->keyPress(KEY_KP1); break;
+            case 1098: keyboard->keyPress(KEY_KP2); break;
+            case 1099: keyboard->keyPress(KEY_KP3); break;
+            case 1100: keyboard->keyPress(KEY_KP4); break;
+            case 1101: keyboard->keyPress(KEY_KP5); break;
+            case 1102: keyboard->keyPress(KEY_KP6); break;
+            case 1103: keyboard->keyPress(KEY_KP7); break;
+            case 1104: keyboard->keyPress(KEY_KP8); break;
+            case 1105: keyboard->keyPress(KEY_KP9); break;
+            case 1106: keyboard->keyPress(KEY_KPASTERISK); break;
+            case 1107: keyboard->keyPress(KEY_KPPLUS); break;
+            case 1108: keyboard->keyPress(KEY_KPCOMMA); break;
+            case 1109: keyboard->keyPress(KEY_KPMINUS); break;
+            case 1110: keyboard->keyPress(KEY_KPDOT); break;
+            case 1111: keyboard->keyPress(KEY_KPSLASH); break;
+            case 1112: keyboard->keyPress(KEY_F1); break;
+            case 1113: keyboard->keyPress(KEY_F2); break;
+            case 1114: keyboard->keyPress(KEY_F3); break;
+            case 1115: keyboard->keyPress(KEY_F4); break;
+            case 1116: keyboard->keyPress(KEY_F5); break;
+            case 1117: keyboard->keyPress(KEY_F6); break;
+            case 1118: keyboard->keyPress(KEY_F7); break;
+            case 1119: keyboard->keyPress(KEY_F8); break;
+            case 1120: keyboard->keyPress(KEY_F9); break;
+            case 1121: keyboard->keyPress(KEY_F10); break;
+            case 1122: keyboard->keyPress(KEY_F11); break;
+            case 1123: keyboard->keyPress(KEY_F12); break;
+            case 1124: keyboard->keyPress(KEY_F13); break;
+            case 1125: keyboard->keyPress(KEY_F14); break;
+            case 1126: keyboard->keyPress(KEY_F15); break;
+            case 1127: keyboard->keyPress(KEY_F16); break;
+            case 1128: keyboard->keyPress(KEY_F17); break;
+            case 1129: keyboard->keyPress(KEY_F18); break;
+            case 1130: keyboard->keyPress(KEY_F19); break;
+            case 1131: keyboard->keyPress(KEY_F20); break;
+            case 1132: keyboard->keyPress(KEY_F21); break;
+            case 1133: keyboard->keyPress(KEY_F22); break;
+            case 1134: keyboard->keyPress(KEY_F23); break;
+            case 1135: keyboard->keyPress(KEY_F24); break;
+            case 1144: keyboard->keyPress(KEY_NUMLOCK); break;
+            case 1145: keyboard->keyPress(KEY_SCROLLLOCK); break;
+            case 1160: keyboard->keyPress(KEY_LEFTSHIFT); break;
+            case 1161: keyboard->keyPress(KEY_RIGHTSHIFT); break;
+            case 1162: keyboard->keyPress(KEY_LEFTCTRL); break;
+            case 1163: keyboard->keyPress(KEY_RIGHTCTRL); break;
+            case 1164: keyboard->keyPress(KEY_LEFTALT); break;
+            case 1165: keyboard->keyPress(KEY_RIGHTALT); break;
+            case 1166: keyboard->keyPress(KEY_MEDIA_WWWBACK); break;
+            case 1169: keyboard->keyPress(KEY_MEDIA_WWWSTOP); break;
+            case 1170: keyboard->keyPress(KEY_MEDIA_WWWSEARCH); break;
+            case 1171: keyboard->keyPress(KEY_MEDIA_WWWFAVORITES); break;
+            case 1172: keyboard->keyPress(KEY_MEDIA_WWWHOME); break;
+            case 1173: keyboard->keyPress( KEY_MUTE); break;
+            case 1174: keyboard->keyPress(KEY_MEDIA_VOLUMEDOWN); break;
+            case 1175: keyboard->keyPress(KEY_MEDIA_VOLUMEUP); break;
+            case 1176: keyboard->keyPress( KEY_MEDIA_NEXTTRACK); break;
+            case 1177: keyboard->keyPress( KEY_MEDIA_PREVIOUSTRACK); break;
+            case 1178: keyboard->keyPress(KEY_MEDIA_STOP); break;
+            case 1179: keyboard->keyPress( KEY_MEDIA_PLAYPAUSE); break;
+            case 1180: keyboard->keyPress( KEY_MEDIA_MAIL); break;
+            case 1181: keyboard->keyPress( KEY_MEDIA_MEDIASELECT); break;
+            case 1250: keyboard->keyPress( KEY_MEDIA_PLAY); break;
+            case 1260: pressReleaseMediaKey(KEY_MEDIA_PLAY,true); break;        
+            case 1261: pressReleaseMediaKey(KEY_MEDIA_PAUSE,true); break;
+            case 1262: pressReleaseMediaKey(KEY_MEDIA_RECORD,true); break;
+            case 1263: pressReleaseMediaKey(KEY_MEDIA_FASTFORWARD,true); break;
+            case 1264: pressReleaseMediaKey(KEY_MEDIA_REWIND,true); break;
+            case 1265: pressReleaseMediaKey(KEY_MEDIA_NEXTTRACK,true); break;
+            case 1266: pressReleaseMediaKey(KEY_MEDIA_PREVIOUSTRACK,true); break;
+            case 1267: pressReleaseMediaKey(KEY_MEDIA_STOP,true); break;
+            case 1268: pressReleaseMediaKey(KEY_MEDIA_EJECT,true); break;
+            case 1269: pressReleaseMediaKey(KEY_MEDIA_RANDOMPLAY,true); break;
+            case 1270: pressReleaseMediaKey(KEY_MEDIA_REPEAT,true); break;
+            case 1271: pressReleaseMediaKey(KEY_MEDIA_PLAYPAUSE,true); break;
+            case 1272: pressReleaseMediaKey(KEY_MEDIA_MUTE,true); break;
+            case 1273: pressReleaseMediaKey(KEY_MEDIA_VOLUMEUP,true); break;
+            case 1274: pressReleaseMediaKey(KEY_MEDIA_VOLUMEDOWN,true); break;
+            case 2008: keyboard->keyRelease(KEY_BACKSPACE); break;
+            case 2009: keyboard->keyRelease(KEY_TAB); break;
+            case 2013: keyboard->keyRelease(KEY_ENTER); break;
+            case 2016: keyboard->keyRelease(KEY_LEFTSHIFT); break;
+            case 2017: keyboard->keyRelease(KEY_LEFTCTRL); break;
+            case 2018: keyboard->keyRelease(KEY_LEFTALT); break;
+            case 2019: keyboard->keyRelease(KEY_PAUSE); break;
+            case 2020: keyboard->keyRelease(KEY_CAPSLOCK); break;
+            case 2027: keyboard->keyRelease(KEY_ESC); break;
+            case 2032: keyboard->keyRelease(KEY_SPACE); break;
+            case 2033: keyboard->keyRelease(KEY_PAGEUP); break;
+            case 2034: keyboard->keyRelease(KEY_PAGEDOWN); break;
+            case 2035: keyboard->keyRelease(KEY_END); break;
+            case 2036: keyboard->keyRelease(KEY_HOME); break;
+            case 2037: keyboard->keyRelease(KEY_LEFT); break;
+            case 2038: keyboard->keyRelease(KEY_UP); break;
+            case 2039: keyboard->keyRelease(KEY_RIGHT); break;
+            case 2040: keyboard->keyRelease(KEY_DOWN); break;
+            case 2041: keyboard->keyRelease(KEY_FRONT ); break;
+            case 2042: keyboard->keyRelease(KEY_SYSRQ ); break;
+            case 2043: keyboard->keyRelease(KEY_OPEN ); break;
+            case 2044: keyboard->keyRelease(KEY_SYSRQ ); break;
+            case 2045: keyboard->keyRelease(KEY_INSERT); break;
+            case 2046: keyboard->keyRelease(KEY_DELETE); break;
+            case 2048: keyboard->keyRelease(KEY_0); break;
+            case 2049: keyboard->keyRelease(KEY_1); break;
+            case 2050: keyboard->keyRelease(KEY_2); break;
+            case 2051: keyboard->keyRelease(KEY_3); break;
+            case 2052: keyboard->keyRelease(KEY_4); break;
+            case 2053: keyboard->keyRelease(KEY_5); break;
+            case 2054: keyboard->keyRelease(KEY_6); break;
+            case 2055: keyboard->keyRelease(KEY_7); break;
+            case 2056: keyboard->keyRelease(KEY_8); break;
+            case 2057: keyboard->keyRelease(KEY_9); break;
+            case 2065: keyboard->keyRelease(KEY_A); break;
+            case 2066: keyboard->keyRelease(KEY_B); break;
+            case 2067: keyboard->keyRelease(KEY_C); break;
+            case 2068: keyboard->keyRelease(KEY_D); break;
+            case 2069: keyboard->keyRelease(KEY_E); break;
+            case 2070: keyboard->keyRelease(KEY_F); break;
+            case 2071: keyboard->keyRelease(KEY_G); break;
+            case 2072: keyboard->keyRelease(KEY_H); break;
+            case 2073: keyboard->keyRelease(KEY_I); break;
+            case 2074: keyboard->keyRelease(KEY_J); break;
+            case 2075: keyboard->keyRelease(KEY_K); break;
+            case 2076: keyboard->keyRelease(KEY_L); break;
+            case 2077: keyboard->keyRelease(KEY_M); break;
+            case 2078: keyboard->keyRelease(KEY_N); break;
+            case 2079: keyboard->keyRelease(KEY_O); break;
+            case 2080: keyboard->keyRelease(KEY_P); break;
+            case 2081: keyboard->keyRelease(KEY_Q); break;
+            case 2082: keyboard->keyRelease(KEY_R); break;
+            case 2083: keyboard->keyRelease(KEY_S); break;
+            case 2084: keyboard->keyRelease(KEY_T); break;
+            case 2085: keyboard->keyRelease(KEY_U); break;
+            case 2086: keyboard->keyRelease(KEY_V); break;
+            case 2087: keyboard->keyRelease(KEY_W); break;
+            case 2088: keyboard->keyRelease(KEY_X); break;
+            case 2089: keyboard->keyRelease(KEY_Y); break;
+            case 2090: keyboard->keyRelease(KEY_Z); break;
+            case 2091: keyboard->keyRelease(KEY_LEFTMETA); break;
+            case 2092: keyboard->keyRelease(KEY_RIGHTMETA); break;
+            case 2093: keyboard->keyRelease(KEY_PROPS); break;
+            case 2096: keyboard->keyRelease(KEY_KP0); break;
+            case 2097: keyboard->keyRelease(KEY_KP1); break;
+            case 2098: keyboard->keyRelease(KEY_KP2); break;
+            case 2099: keyboard->keyRelease(KEY_KP3); break;
+            case 2100: keyboard->keyRelease(KEY_KP4); break;
+            case 2101: keyboard->keyRelease(KEY_KP5); break;
+            case 2102: keyboard->keyRelease(KEY_KP6); break;
+            case 2103: keyboard->keyRelease(KEY_KP7); break;
+            case 2104: keyboard->keyRelease(KEY_KP8); break;
+            case 2105: keyboard->keyRelease(KEY_KP9); break;
+            case 2106: keyboard->keyRelease(KEY_KPASTERISK); break;
+            case 2107: keyboard->keyRelease(KEY_KPPLUS); break;
+            case 2108: keyboard->keyRelease(KEY_KPCOMMA); break;
+            case 2109: keyboard->keyRelease(KEY_KPMINUS); break;
+            case 2110: keyboard->keyRelease(KEY_KPDOT); break;
+            case 2111: keyboard->keyRelease(KEY_KPSLASH); break;
+            case 2112: keyboard->keyRelease(KEY_F1); break;
+            case 2113: keyboard->keyRelease(KEY_F2); break;
+            case 2114: keyboard->keyRelease(KEY_F3); break;
+            case 2115: keyboard->keyRelease(KEY_F4); break;
+            case 2116: keyboard->keyRelease(KEY_F5); break;
+            case 2117: keyboard->keyRelease(KEY_F6); break;
+            case 2118: keyboard->keyRelease(KEY_F7); break;
+            case 2119: keyboard->keyRelease(KEY_F8); break;
+            case 2120: keyboard->keyRelease(KEY_F9); break;
+            case 2121: keyboard->keyRelease(KEY_F10); break;
+            case 2122: keyboard->keyRelease(KEY_F11); break;
+            case 2123: keyboard->keyRelease(KEY_F12); break;
+            case 2124: keyboard->keyRelease(KEY_F13); break;
+            case 2125: keyboard->keyRelease(KEY_F14); break;
+            case 2126: keyboard->keyRelease(KEY_F15); break;
+            case 2127: keyboard->keyRelease(KEY_F16); break;
+            case 2128: keyboard->keyRelease(KEY_F17); break;
+            case 2129: keyboard->keyRelease(KEY_F18); break;
+            case 2130: keyboard->keyRelease(KEY_F19); break;
+            case 2131: keyboard->keyRelease(KEY_F20); break;
+            case 2132: keyboard->keyRelease(KEY_F21); break;
+            case 2133: keyboard->keyRelease(KEY_F22); break;
+            case 2134: keyboard->keyRelease(KEY_F23); break;
+            case 2135: keyboard->keyRelease(KEY_F24); break;
+            case 2144: keyboard->keyRelease(KEY_NUMLOCK); break;
+            case 2145: keyboard->keyRelease(KEY_SCROLLLOCK); break;
+            case 2160: keyboard->keyRelease(KEY_LEFTSHIFT); break;
+            case 2161: keyboard->keyRelease(KEY_RIGHTSHIFT); break;
+            case 2162: keyboard->keyRelease(KEY_LEFTCTRL); break;
+            case 2163: keyboard->keyRelease(KEY_RIGHTCTRL); break;
+            case 2164: keyboard->keyRelease(KEY_LEFTALT); break;
+            case 2165: keyboard->keyRelease(KEY_RIGHTALT); break;
+            case 2166: keyboard->keyRelease(KEY_MEDIA_WWWBACK); break;
+            case 2169: keyboard->keyRelease(KEY_MEDIA_WWWSTOP); break;
+            case 2170: keyboard->keyRelease(KEY_MEDIA_WWWSEARCH); break;
+            case 2171: keyboard->keyRelease(KEY_MEDIA_WWWFAVORITES); break;
+            case 2172: keyboard->keyRelease(KEY_MEDIA_WWWHOME); break;
+            case 2173: keyboard->keyRelease( KEY_MUTE); break;
+            case 2174: keyboard->keyRelease(KEY_MEDIA_VOLUMEDOWN); break;
+            case 2175: keyboard->keyRelease(KEY_MEDIA_VOLUMEUP); break;
+            case 2176: keyboard->keyRelease( KEY_MEDIA_NEXTTRACK); break;
+            case 2177: keyboard->keyRelease( KEY_MEDIA_PREVIOUSTRACK); break;
+            case 2178: keyboard->keyRelease(KEY_MEDIA_STOP); break;
+            case 2179: keyboard->keyRelease( KEY_MEDIA_PLAYPAUSE); break;
+            case 2180: keyboard->keyRelease( KEY_MEDIA_MAIL); break;
+            case 2181: keyboard->keyRelease( KEY_MEDIA_MEDIASELECT); break;
+            case 2250: keyboard->keyRelease( KEY_MEDIA_PLAY); break;
+            case 2260: pressReleaseMediaKey(KEY_MEDIA_PLAY,false); break;        
+            case 2261: pressReleaseMediaKey(KEY_MEDIA_PAUSE,false); break;
+            case 2262: pressReleaseMediaKey(KEY_MEDIA_RECORD,false); break;
+            case 2263: pressReleaseMediaKey(KEY_MEDIA_FASTFORWARD,false); break;
+            case 2264: pressReleaseMediaKey(KEY_MEDIA_REWIND,false); break;
+            case 2265: pressReleaseMediaKey(KEY_MEDIA_NEXTTRACK,false); break;
+            case 2266: pressReleaseMediaKey(KEY_MEDIA_PREVIOUSTRACK,false); break;
+            case 2267: pressReleaseMediaKey(KEY_MEDIA_STOP,false); break;
+            case 2268: pressReleaseMediaKey(KEY_MEDIA_EJECT,false); break;
+            case 2269: pressReleaseMediaKey(KEY_MEDIA_RANDOMPLAY,false); break;
+            case 2270: pressReleaseMediaKey(KEY_MEDIA_REPEAT,false); break;
+            case 2271: pressReleaseMediaKey(KEY_MEDIA_PLAYPAUSE,false); break;
+            case 2272: pressReleaseMediaKey(KEY_MEDIA_MUTE,false); break;
+            case 2273: pressReleaseMediaKey(KEY_MEDIA_VOLUMEUP,false); break;
+            case 2274: pressReleaseMediaKey(KEY_MEDIA_VOLUMEDOWN,false); break;
+             
+        }   
+    }
+}
 
 void integerToXbox(int value){
   // COMMAND TO SE TRUE OR FALSE BUTTONS OR BUTTON LIKE 
@@ -758,26 +1628,6 @@ void integerToXbox(int value){
     float leftVerticalPercent= turnFrom1To99AsPercent(leftVerticalfrom1to99);
     float rightHorizontalPercent= turnFrom1To99AsPercent(rightHorizontalfrom1to99);
     float rightVerticalPercent= turnFrom1To99AsPercent(rightVerticalfrom1to99);
-    
-    Serial.print("DD:");
-    Serial.print(leftHorizontalfrom1to99);
-    Serial.print(" ");
-    Serial.print(leftVerticalfrom1to99);
-    Serial.print(" ");
-    Serial.print(rightHorizontalfrom1to99);
-    Serial.print(" ");
-    Serial.print(rightVerticalfrom1to99);
-    Serial.println(" ");
-    Serial.print("PCT:");
-    Serial.print(leftHorizontalPercent);
-    Serial.print(" ");
-    Serial.print(leftHorizontalPercent);
-    Serial.print(" ");
-    Serial.print(leftHorizontalPercent);
-    Serial.print(" ");
-    Serial.print(leftHorizontalPercent);
-    Serial.println(" ");
-    
     setLeftHorizontal(leftHorizontalPercent);
     setLeftVertical(leftVerticalPercent);
     setRightHorizontal(rightHorizontalPercent);
@@ -1041,3 +1891,7 @@ void randomAxis(){
 
 
 
+/**
+
+       
+*/
