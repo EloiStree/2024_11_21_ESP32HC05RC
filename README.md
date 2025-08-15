@@ -1,7 +1,12 @@
 # 2024_11_21_ESP32HC05RC
 Control ESP32 as gamepad from UART
 
+Required:
+- https://github.com/tomstewart89/Callback
+- https://github.com/h2zero/NimBLE-Arduino
+- https://github.com/Mystfit/ESP32-BLE-CompositeHID
 
+---------------
 
 ![image](https://github.com/user-attachments/assets/7e3dacf4-0b70-4392-93af-99d580b50749)
 
