@@ -1,4 +1,8 @@
 # 2024_11_21_ESP32HC05RC
+
+**Tutorial: https://youtu.be/-XuE9P1T2_k?t=201**
+
+
 Control ESP32 as gamepad from UART
 
 Required:
