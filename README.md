@@ -10,6 +10,10 @@ Required:
 - https://github.com/h2zero/NimBLE-Arduino
 - https://github.com/Mystfit/ESP32-BLE-CompositeHID
 
+
+Need to be done for most Window:  
+https://github.com/espressif/arduino-esp32/issues/12161#issuecomment-3680101494  
+
 ---------------
 
 ![image](https://github.com/user-attachments/assets/7e3dacf4-0b70-4392-93af-99d580b50749)
