@@ -2,17 +2,25 @@
 
 **Tutorial: https://youtu.be/-XuE9P1T2_k?t=201**
 
-
 Control ESP32 as gamepad from UART
 
+In ```C:\Users\USER_NAME\Documents\Arduino\libraries```
 Required:
-- https://github.com/tomstewart89/Callback
-- https://github.com/h2zero/NimBLE-Arduino
-- https://github.com/Mystfit/ESP32-BLE-CompositeHID
+```
+git clone https://github.com/tomstewart89/Callback.git
+git clone https://github.com/h2zero/NimBLE-Arduino.git
+git clone https://github.com/Mystfit/ESP32-BLE-CompositeHID.git
+```
 
+Add to preference
+```
+https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
 
 Need to be done for most Window:  
+```
 https://github.com/espressif/arduino-esp32/issues/12161#issuecomment-3680101494  
+```
 
 ---------------
 
