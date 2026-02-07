@@ -6,11 +6,11 @@ Control ESP32 as gamepad from UART
 
 In ```C:\Users\USER_NAME\Documents\Arduino\libraries```
 Required:
-```
+
 https://github.com/tomstewart89/Callback
 https://github.com/h2zero/NimBLE-Arduino
 https://github.com/Mystfit/ESP32-BLE-CompositeHID
-```
+
 
 Add to preference
 ```
