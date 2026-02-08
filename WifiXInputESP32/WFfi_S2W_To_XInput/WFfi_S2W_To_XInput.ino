@@ -14,7 +14,10 @@ const String WIFI_NAME = "EloiStreeWifi2G";
 const String WIFI_PASSWORD = "11234566";
 //const char* WIFI_NAME = "Stree_5G";
 //const char* WIFI_PASSWORD = "11234566";
-const char* ESP32_NAME = "ESP32 XInput";
+const char* ESP32_NAME = "P1 ESP32 APInt S2W to XInput";
+//const char* ESP32_NAME = "P2 ESP32 APInt S2W to XInput";
+//const char* ESP32_NAME = "P3 ESP32 APInt S2W to XInput";
+//const char* ESP32_NAME = "P4 ESP32 APInt S2W to XInput";
 const char* ESP32_COMPANY = "APIntIO";
 
 
@@ -67,6 +70,69 @@ class IntAndBinaryUtility{
         }
         buffer[32] = '\0'; // Null-terminate the string
     }
+};
+
+struct Delayed {
+  unsigned long when_to_execute;
+  int value;
+  bool is_active;
+};
+
+class IntegerDelayerInMilliseconds {
+public:
+  struct DelayedInteger {
+    int value;
+  };
+
+  static const uint8_t MAX_DELAYED = 200; // adjust as needed
+
+  Delayed delayed[MAX_DELAYED];
+  uint8_t pool_index = 0;
+  
+ 
+  unsigned long now() {
+    return millis();
+  }
+
+
+  void appendInPool(int delay_ms, int value) {
+    delayed[pool_index].when_to_execute = now() + delay_ms;
+    delayed[pool_index].value = value;
+    delayed[pool_index].is_active = true;
+    pool_index = (pool_index + 1) % MAX_DELAYED;
+    
+  }
+
+  int getArraySize() {
+    return MAX_DELAYED;
+  }
+  bool isReadyToExecute(int index) {
+    if (index >= MAX_DELAYED) return false;
+    return now() >= delayed[index].when_to_execute;
+  }
+  void setToInactive(int index) {
+    if (index >= MAX_DELAYED) return;
+    delayed[index].is_active = false;
+    delayed[index].when_to_execute = 0;
+    delayed[index].value = 0;
+  }
+
+  int pool_size() {
+    return MAX_DELAYED;
+  }
+
+  bool is_ready(int index) {
+    if (index >= MAX_DELAYED) return false;
+    return delayed[index].is_active && isReadyToExecute(index);
+  }
+
+  DelayedInteger get_delayed_integer(int index) {
+    return {delayed[index].value};
+  }
+
+  void remove_from_pool(int index) {
+    setToInactive(index);
+  }
 };
 
 class GamepadXboxBLE {
@@ -157,6 +223,14 @@ public:
 
         // Ensure clean state
         release_all();
+
+        set_left_horizontal_percent(0);
+        set_left_vertical_percent(0);
+        set_right_horizontal_percent(0);
+        set_right_vertical_percent(0);
+        set_trigger_left_percent(0);
+        set_trigger_right_percent(0);
+
 
         Serial.println("[XboxBLE] Ready! Waiting for connection...");
         return true;
@@ -461,7 +535,7 @@ public:
   static bool m_use_print_debug;
 };
 
-bool DebugPrintStatic::m_use_print_debug = true;
+bool DebugPrintStatic::m_use_print_debug = false;
 
 
 
@@ -527,6 +601,10 @@ public:
 
   static constexpr int32_t COMMAND_START_RECORDING = 1321;
   static constexpr int32_t COMMAND_STOP_RECORDING = 2321;
+
+  static constexpr int32_t COMMAND_RELEASE_ALL_BUT_MENU = 1391 ;
+  static constexpr int32_t COMMAND_RELEASE_ALL = 1390 ;
+  
 
   char m_binaryBufferOfInteger[33];
   void parse_integer(int32_t value) {
@@ -599,6 +677,45 @@ public:
         case 2348: gamepad()->set_right_vertical_percent(0); gamepad()->set_right_horizontal_percent(0);    break;
 
 
+        case COMMAND_RELEASE_ALL_BUT_MENU: 
+        case COMMAND_RELEASE_ALL_BUT_MENU+1000:
+            gamepad()->press_a(false);
+            gamepad()->press_b(false);
+            gamepad()->press_x(false);
+            gamepad()->press_y(false);
+            gamepad()->press_left_side_button(false);
+            gamepad()->press_right_side_button(false);
+            gamepad()->press_left_stick(false);
+            gamepad()->press_right_stick(false);
+            gamepad()->set_left_horizontal_percent(0);
+            gamepad()->set_left_vertical_percent(0);
+            gamepad()->set_right_horizontal_percent(0);
+            gamepad()->set_right_vertical_percent(0);
+            gamepad()->set_trigger_left_percent(0);
+            gamepad()->set_trigger_right_percent(0);
+            gamepad()->release_dpad();
+            break;
+        case COMMAND_RELEASE_ALL:
+        case COMMAND_RELEASE_ALL+1000:
+            gamepad()->press_a(false);
+            gamepad()->press_b(false);
+            gamepad()->press_x(false);
+            gamepad()->press_y(false);
+            gamepad()->press_left_side_button(false);
+            gamepad()->press_right_side_button(false);
+            gamepad()->press_left_stick(false);
+            gamepad()->press_right_stick(false);
+            gamepad()->press_home_xbox_button(false);
+            gamepad()->set_left_horizontal_percent(0);
+            gamepad()->set_left_vertical_percent(0);
+            gamepad()->set_right_horizontal_percent(0);
+            gamepad()->set_right_vertical_percent(0);
+            gamepad()->set_trigger_left_percent(0);
+            gamepad()->set_trigger_right_percent(0);
+            gamepad()->press_menu_right(false);
+            gamepad()->press_menu_left(false);
+            break;
+        
 
 
         case 1310: gamepad()->release_dpad(); break;
@@ -774,17 +891,17 @@ public:
           // For reference when implementing the decode function:
            float trigger_left = 0.0;
            float trigger_right = 0.0;
-           if is_integer_bit_right_to_left_true(value, 16): trigger_left += 0.10
-           if is_integer_bit_right_to_left_true(value, 17): trigger_left += 0.15
-           if is_integer_bit_right_to_left_true(value, 18): trigger_left += 0.25
-           if is_integer_bit_right_to_left_true(value, 19): trigger_left += 0.50
-           if is_integer_bit_right_to_left_true(value, 20): trigger_right += 0.10
-           if is_integer_bit_right_to_left_true(value, 21): trigger_right += 0.15
-           if is_integer_bit_right_to_left_true(value, 22): trigger_right += 0.25
-           if is_integer_bit_right_to_left_true(value, 23): trigger_right += 0.50
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 16)) trigger_left += 0.10;
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 17)) trigger_left += 0.15;
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 18)) trigger_left += 0.25;
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 19)) trigger_left += 0.50;
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 20)) trigger_right += 0.10;
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 21)) trigger_right += 0.15;
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 22)) trigger_right += 0.25;
+           if (IntAndBinaryUtility::is_integer_bit_right_to_left_true(value, 23)) trigger_right += 0.50;
 
-            gamepad()->set_trigger_left_percent(triggerLeft);
-            gamepad()->set_trigger_right_percent(triggerRight);
+            gamepad()->set_trigger_left_percent(trigger_left);
+            gamepad()->set_trigger_right_percent(trigger_right);
 
             if(arrowVertical==1 && arrowHorizontal==0)
                  gamepad()->press_arrow_n();
@@ -844,24 +961,30 @@ public:
 class IntegerListenToUDP {
 
 public:
-  const char* ssid = WIFI_NAME;
-  const char* password = WIFI_PASSWORD;
+  String ssid = WIFI_NAME;
+  String password = WIFI_PASSWORD;
 
   WiFiUDP wifi_udp_listener;
   int UDP_PORT = 3615;
   String only_accept_from_ip = "0.0.0.0";
   AbstractIndexIntegerDateUdpRelay* udp_relay = nullptr;
+  IntegerDelayerInMilliseconds delayer = IntegerDelayerInMilliseconds();
 
   void set_udp_relay(AbstractIndexIntegerDateUdpRelay* relay) {
     udp_relay = relay;
   }
 
+  void integer_is_ready_to_be_pushed(int32_t value) {
+    if (udp_relay != nullptr) {
+      udp_relay->push_in_integer(0, value, 0);
+    }
+  }
   void setup(String wifi_name, String wifi_password, int32_t udp_port_to_listen, String accept_from_ip = "0.0.0.0") {
-    ssid = wifi_name.c_str();
-    password = wifi_password.c_str();
+    ssid = wifi_name;
+    password = wifi_password;
     UDP_PORT = udp_port_to_listen;
     only_accept_from_ip = accept_from_ip;
-    WiFi.begin(ssid, password);
+    WiFi.begin(ssid.c_str(), password.c_str());
     Serial.print("Connecting");
     while (WiFi.status() != WL_CONNECTED) {
       delay(300);
@@ -875,9 +998,23 @@ public:
     wifi_udp_listener.begin(udp_port_to_listen);
     Serial.printf("UDP server listening on 0.0.0.0:%d\n", udp_port_to_listen);
     Serial.println("Accepting from IP: " + only_accept_from_ip);
+
+
+    IntegerDelayerInMilliseconds delayer = IntegerDelayerInMilliseconds();
+   
+   
   }
 
+
+  unsigned long value_to_be_relative_date = 1000*3600*25;
+
+
+
   void loop() {
+
+
+
+
     int packetSize = wifi_udp_listener.parsePacket();
     if (packetSize > 0) {
       uint8_t buffer[512];
@@ -891,6 +1028,7 @@ public:
 
 
       if (len > 0) {
+
         if (DebugPrintStatic::is_using_debug_print()) {
           Serial.printf("Received %d bytes from %s:%d, forwarded to UART\n",
                         len,
@@ -909,7 +1047,11 @@ public:
           int32_t index = IIDUtility::byte_to_little_endian_int(buffer[0], buffer[1], buffer[2], buffer[3]);
           int32_t value = IIDUtility::byte_to_little_endian_int(buffer[4], buffer[5], buffer[6], buffer[7]);
           uint64_t date = IIDUtility::bytes_to_little_endian_uint64(buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15]);
-          if (udp_relay != nullptr) {
+          if (date < value_to_be_relative_date)
+          {
+            delayer.appendInPool (date ,value );
+          }
+          else if (udp_relay != nullptr) {
             udp_relay->push_in_integer(index, value, date);
             value_received = value;
           }
@@ -923,10 +1065,33 @@ public:
         } else if (len == 12) {
           int32_t value = IIDUtility::byte_to_little_endian_int(buffer[0], buffer[1], buffer[2], buffer[3]);
           uint64_t date = IIDUtility::bytes_to_little_endian_uint64(buffer[4], buffer[5], buffer[6], buffer[7], buffer[8], buffer[9], buffer[10], buffer[11]);
-          if (udp_relay != nullptr) {
+          if (date < value_to_be_relative_date)
+          {
+            delayer.appendInPool (date ,value );
+          }
+          else if (udp_relay != nullptr) {
             udp_relay->push_in_integer(0, value, date);
             value_received = value;
           }
+        }
+        else if  (len >= 16 ) {
+          //printf("BLOCK START\n");
+          for (int i = 0; i < len; i += 16) {
+            int32_t index = IIDUtility::byte_to_little_endian_int(buffer[i], buffer[i + 1], buffer[i + 2], buffer[i + 3]);
+            int32_t value = IIDUtility::byte_to_little_endian_int(buffer[i + 4], buffer[i + 5], buffer[i + 6], buffer[i + 7]);
+            uint64_t date = IIDUtility::bytes_to_little_endian_uint64(buffer[i + 8], buffer[i + 9], buffer[i + 10], buffer[i + 11], buffer[i + 12], buffer[i + 13], buffer[i + 14], buffer[i + 15]);
+            //printf("Received packet - Index: %d, Value: %d, Date: %llu\n", index, value, date);
+            if (date < value_to_be_relative_date)
+            {
+              delayer.appendInPool (date ,value );
+            }
+            else if (udp_relay != nullptr) {
+              udp_relay->push_in_integer(index, value, date);
+              value_received = value;
+            }
+          }       
+          //printf("BLOCK STOP\n");
+     
         }
 
         if (value_received == 3123) {
@@ -943,6 +1108,18 @@ public:
         }
       }
     }
+
+    for(int i = 0; i < delayer.pool_size(); i++) {
+      if(delayer.is_ready(i)) {
+        IntegerDelayerInMilliseconds::DelayedInteger delayedInteger = delayer.get_delayed_integer(i);
+        if (udp_relay != nullptr) {
+          udp_relay->push_in_integer(0, delayedInteger.value, 0);
+        }
+        delayer.remove_from_pool(i);
+      }
+    }
+
+
     delay(1);
   }
 };
@@ -960,7 +1137,9 @@ public:
     udp_listener = IntegerListenToUDP();
     udp_listener.set_udp_relay(&udp_iid_relay);
     udp_iid_relay.set_gamepad(gamepad);
-    udp_listener.setup("EloiStreeWifi2G", "11234566", 3615, "192.168.178.38");
+    //udp_listener.setup("EloiStreeWifi2G", "11234566", 3615, "192.168.178.38");
+    udp_listener.setup("EloiStreeWifi2G", "11234566", 3615, "0.0.0.0");
+    
   }
 
   void loop() {
