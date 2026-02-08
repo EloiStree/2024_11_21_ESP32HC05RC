@@ -3,7 +3,7 @@
 
 > Allows using the Wi-Fi of an ESP32 to simulate a Bluetooth XInput gamepad.
 
-This tool listens to the IID and S2W formats through UDP messages, which are interpreted as Xbox Input.
+This tool listens to the [IID](https://github.com/EloiStree/IID) and [S2W](https://github.com/EloiStree/S2W) formats through UDP messages, which are interpreted as Xbox Input.
 
 I was previously using UART.
 However, Bluetooth multiplatform plugins are a pain to add to the game engine I use for teaching.
