@@ -11,7 +11,7 @@ However, Bluetooth multiplatform plugins are a pain to add to the game engine I 
 **Previous tutorial:**
 [https://youtu.be/-XuE9P1T2_k?t=201](https://youtu.be/-XuE9P1T2_k?t=201)
 
-To simulate XInput, we need the following library. ([Archived ZIP](#))
+To simulate XInput, we need the following library. ([Archived ZIP](https://github.com/EloiStree/2024_11_21_ESP32HC05RC/releases/tag/ZIP_SAVE))
 
 Go to:
 
